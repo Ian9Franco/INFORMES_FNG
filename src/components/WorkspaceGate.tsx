@@ -27,7 +27,8 @@ export default function WorkspaceGate(){
   let alive=true
   setBusy(true)
   // Each account has an isolated JSON workspace protected by PostgreSQL RLS.
-  supabase.from('workspaces').select('data').eq('user_id',user.id).maybeSingle().then(async({data,error})=>{
+  const fetchWorkspace = async () => {
+   const { data, error } = await supabase.from('workspaces').select('data').eq('user_id',user.id).maybeSingle()
    if(!alive)return
    if(error){setMessage(error.message);setBusy(false);return}
    let value:Store
@@ -41,7 +42,8 @@ export default function WorkspaceGate(){
     if(writeError){if(alive){setMessage(writeError.message);setBusy(false)}return}
    }
    if(alive){setStored(value);setBusy(false);setMessage('')}
-  }).catch(()=>{if(alive){setBusy(false);setMessage('No se pudieron cargar tus datos.')}})
+  }
+  void fetchWorkspace().catch(()=>{if(alive){setBusy(false);setMessage('No se pudieron cargar tus datos.')}})
   return ()=>{alive=false}
  },[user?.id])
  const onChange=useCallback((next:Store)=>{
