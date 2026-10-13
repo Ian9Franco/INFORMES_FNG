@@ -1,39 +1,32 @@
 # Informes FNG
 
-PWA inicial para el seguimiento personal del trabajo en Meta Ads. Separa la bitácora de acciones y observaciones de la planilla que se imprime los lunes.
+PWA de seguimiento de Meta Ads construida con **Next.js (App Router)**, React, TypeScript y Supabase.
 
-## Lo que ya funciona
-- Panel de jornada y revisiones por cliente.
-- Grilla semanal de **lunes a sábado**. Una revisión por cliente y día; admite notas y acciones.
-- Pendientes persistentes entre semanas y posibilidad de marcarlos resueltos.
-- Cierre y reapertura manual de semanas. Cada lunes se muestra una grilla nueva sin borrar las anteriores.
-- Clientes activos/archivados; 27 nombres iniciales transcritos de la hoja, editables.
-- Planilla A4 vertical y reporte detallado, imprimibles o guardables como PDF.
-- PWA instalable, recursos cacheados, almacenamiento local y exportación/importación de respaldo JSON.
+## Preparación
 
-## Ejecutar
+Node.js 20+; `npm install`.
 
-Node.js 20+.
+1. Copiar `.env.example` como `.env.local` y completar `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. **No guardar claves secretas en Git.**
+2. El proyecto Supabase debe tener la tabla `public.workspaces` con RLS y políticas de acceso por `auth.uid() = user_id` (migración aplicada en el proyecto conectado).
+3. Configurar en Supabase Auth → URL Configuration la Site URL de producción y los Redirect URLs que uses (ej. `http://localhost:3000/**` para desarrollo).
+4. Ejecutar:
 
 ```bash
-npm install
 npm run dev
 npm run build
 ```
 
-## Flujo de lunes
-1. En **Semana**, ir a la semana anterior, revisar marcas y cerrar.
-2. En **Informes**, elegir la semana y generar la planilla resumida o el detalle.
-3. Imprimir o seleccionar «Guardar como PDF».
-4. La nueva semana ya está limpia; los pendientes siguen visibles.
+## Incluye
+- Ingreso mediante correo y enlace mágico de Supabase Auth.
+- Persistencia PostgreSQL, un workspace JSON por usuario protegido por RLS.
+- 27 clientes iniciales basados en la planilla, con alta y archivo.
+- Revisiones lunes a sábado, acciones y observaciones por día.
+- Pendientes persistentes y cierre/reapertura manual de semanas.
+- Planilla A4 vertical e informe detallado, imprimibles o guardables como PDF.
+- Manifest instalable. **No hay service worker ni soporte offline todavía**.
+- Importación inicial automática del contenido local existente al crear un workspace; respaldos manuales JSON.
 
-## Limitaciones del primer PR
-**No hay backend, login ni sincronización entre dispositivos.** Los datos se guardan en `localStorage` de este navegador. Limpiar el navegador puede borrarlos: exportá respaldos frecuentemente. Importar un JSON reemplaza todos los registros locales. No registres información sensible de clientes hasta implementar autenticación y políticas de acceso. El caché PWA no sincroniza datos.
+## Advertencias
+Los datos locales de una versión anterior se importan solo al crear el workspace remoto por primera vez. No importar en dispositivos adicionales, donde podría sustituir los datos sincronizados. Las escrituras se serializan dentro de una pestaña; aún faltan control de concurrencia entre dispositivos, manejo robusto de conflictos y de fallos de red. La vista de pendientes del PDF representa el estado actual, no un cierre histórico.
 
-No hay conexión con Meta Ads, emails automáticos ni notificaciones push. Los pendientes incluidos en el informe detallado reflejan su estado al imprimir, no una fotografía histórica del cierre semanal. La lista de nombres fue transcrita de una fotografía, por lo que conviene verificarla.
-
-## Próximos PR
-- Supabase Auth + PostgreSQL y RLS para sincronización segura.
-- Ficha/historial por cliente, búsqueda y filtros.
-- Vencimientos y notificaciones.
-- Pruebas automáticas y refinamiento de reportes.
+Para uso diario importante, agregaremos tablas normalizadas, migraciones versionadas, mejores políticas de sincronización y pruebas de integración.

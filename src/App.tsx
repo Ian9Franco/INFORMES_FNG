@@ -1,11 +1,12 @@
+'use client'
 import { useEffect, useState } from 'react'
 import { type Store, type Review, load, persist, keyDate, date, monday, weekDays, format } from './data'
 type Tab='jornada'|'semana'|'clientes'|'informes'
 type Print='grilla'|'detalle'
 const weekdays=['LUN','MAR','MIÉ','JUE','VIE','SÁB']
 const uid=()=>crypto.randomUUID()
-export default function App(){
- const [db,setDb]=useState<Store>(load)
+export default function App({initialData,onChange}:{initialData?:Store;onChange?:(data:Store)=>void}){
+ const [db,setDb]=useState<Store>(()=>initialData??load())
  const [tab,setTab]=useState<Tab>('jornada')
  const [week,setWeek]=useState(()=>monday(new Date()))
  const [selected,setSelected]=useState<{id:string;day:string}|null>(null)
@@ -25,7 +26,7 @@ export default function App(){
  const client=selected?db.clients.find(c=>c.id===selected.id):undefined
  const pending=db.pending.filter(p=>!p.resolved)
  const weekLabel=format(days[0])+' al '+format(days[5])+' de '+date(days[5]).getFullYear()
- useEffect(()=>{try{persist(db)}catch{setError('No se pudieron guardar los datos. Exportá una copia de seguridad.')}},[db])
+ useEffect(()=>{try{persist(db);onChange?.(db)}catch{setError('No se pudieron guardar los datos. Exportá una copia de seguridad.')}},[db,onChange])
  function open(id:string,day:string){const r=review(id,day);setSelected({id,day});setActions(r?.actions||'');setObservations(r?.observations||'');setPendingText('')}
  function save(){if(!selected||db.closed.includes(monday(date(selected.day))))return;const old=review(selected.id,selected.day);const item:Review={id:old?.id||uid(),clientId:selected.id,date:selected.day,createdAt:old?.createdAt||new Date().toISOString(),actions:actions.trim(),observations:observations.trim()};setDb(d=>({...d,reviews:[...d.reviews.filter(r=>r.clientId!==selected.id||r.date!==selected.day),item]}));setSelected(null)}
  function addPending(){if(!selected||!pendingText.trim())return;setDb(d=>({...d,pending:[...d.pending,{id:uid(),clientId:selected.id,text:pendingText.trim(),resolved:false}]}));setPendingText('')}

@@ -2,3 +2,11 @@
 @media(max-width:700px){.shell{display:block}.sidebar{position:sticky;top:0;z-index:5;width:100%;padding:11px;gap:8px}.logo>b{font-size:16px;padding:5px 11px}.sidebar-note{display:none}nav{display:flex;justify-content:space-between}nav button{font-size:12px;padding:8px}.main{padding:22px 12px}.main h1{font-size:24px}.metrics{gap:7px}.metrics>div{padding:11px}.metrics span{font-size:10px}.metrics b{font-size:27px}.card{padding:14px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.report-types{grid-template-columns:1fr}.add{flex-wrap:wrap}}
 @page{size:A4 portrait;margin:12mm}
 @media print{html,body,#root,.shell{background:white!important;color:#111!important;margin:0!important;padding:0!important;min-height:0!important;display:block!important}.screen{display:none!important}.print-paper{display:block!important;font-family:Arial,sans-serif;color:black;font-size:10px}.print-paper header{margin-bottom:20px}.print-paper header h1{font-size:20px;margin:0 0 8px}.print-paper header p{font-size:11px;color:#333}.paper-grid{border-collapse:collapse;width:100%;table-layout:fixed}.paper-grid td,.paper-grid th{border-bottom:1px solid #555;padding:4px 3px;height:23px;text-align:center}.paper-grid td:first-child,.paper-grid th:first-child{text-align:left;width:35%}.paper-grid th small{display:block;font-size:8px;font-weight:400}.paper-detail section{break-inside:avoid}.paper-detail article{break-inside:avoid;padding:4px}.paper-detail h2{font-size:14px;border-bottom:1px solid #ccc;margin-top:14px}.paper-detail p{white-space:pre-wrap}.print-paper footer{font-size:9px;color:#666;margin-top:16px}}
+
+.session-bar{display:flex;align-items:center;justify-content:flex-end;gap:14px;background:#13243c;color:#bdd0ed;padding:7px 18px;font-size:12px;flex-wrap:wrap}
+.session-bar button{padding:5px 9px;font-size:12px}
+.auth-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;background:#0c1524}
+.auth-card{border:1px solid #38506b;border-radius:16px;background:#142239;padding:30px;width:min(440px,100%)}
+.auth-card p{color:#bacce4;line-height:1.5}
+.auth-card label{display:grid;gap:8px;font-size:13px;margin:22px 0}
+.auth-card input{padding:12px;border-radius:8px;color:white;background:#0c1b30;border:1px solid #38506b}
