@@ -46,3 +46,19 @@ La aplicación ya dibuja ese recorrido, pero **M0 no equivale a aprobación prod
 | Dependencias variables | Lockfile y auditoría periódica |
 
 Ver el [estado actual](ESTADO_ACTUAL.md) y el [backlog](BACKLOG.md). Revisar el roadmap al terminar cada hito, no por calendario.
+
+## Ampliación: Companion, doble plataforma y notificaciones móviles
+
+La arquitectura inicial sigue válida para el registro manual. La expansión se coordina con el [roadmap de FNG-Companion](https://github.com/Ian9Franco/FNG-Companion/blob/feat/extension-foundation/docs/ROADMAP.md).
+
+| Hito | INFORMES FNG | Companion | Validación |
+| --- | --- | --- | --- |
+| C0 — base | Documentar compatibilidad Meta/Google, contrato y notificaciones | Manifest MV3, panel y sesiones locales | Builds + prueba manual antes de release |
+| C1 — modelo seguro | Normalizar cuentas por cliente y plataforma; resolver conflictos de escritura | Mapping de candidatos Google/Meta | IDs desconocidos no se asignan automáticamente |
+| C2 — comunicación | Ingesta con RLS, autenticación e idempotencia | Sync autenticada y cola de eventos | Sesiones aparecen una sola vez por usuario |
+| C3 — bandeja | Reconciliar sesiones y registros; bandeja de pendientes | Panel puede abrir registro contextual | Sin marcar «revisado» al observar visita |
+| C4 — revisión planificada | Horarios/frecuencias por cuenta y plataforma | Cobertura observada como señal opcional | Solo recordar cuentas con revisión programada |
+| C5 — PWA móvil | Web Push, service worker, suscripciones y scheduler | Ninguna dependencia en Chrome móvil | Avisos en dispositivos reales con snooze y silencio |
+
+**No usar Meta/Google Marketing APIs para rastrear sesiones.** Posible enriquecimiento DOM solo tras evaluación de autorización, fiabilidad y privacidad. Foco principal: ayudar a documentar, no fiscalizar campañas.
+

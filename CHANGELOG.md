@@ -38,3 +38,10 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 
 ### Posteriormente reemplazado
 - Vite y su configuración fueron retirados en la iteración 0.2.0.
+
+### Documentación transversal (Unreleased)
+
+- Incorporado Google Ads al alcance objetivo de FNG, sin cambiar aún el modelo cliente/fecha existente.
+- Documentado FNG-Companion para sesiones detectadas en Meta Ads/Google Ads, mapping de IDs y evidencia limitada.
+- Definidas reglas futuras para avisos por sesión sin documentar, revisiones omitidas, aplazamientos y push móvil. No implementadas.
+

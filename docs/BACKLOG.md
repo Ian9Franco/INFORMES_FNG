@@ -53,3 +53,23 @@
 - Mover a **Hecho** solo con pruebas o evidencia registrada en el PR.
 - Cada cambio de alcance debe actualizar [ESTADO_ACTUAL.md](ESTADO_ACTUAL.md) y [CHANGELOG.md](../CHANGELOG.md).
 - Una prioridad no es una fecha de entrega; el roadmap define orden y entregables, no estimaciones inventadas.
+
+## Nuevo alcance transversal — Meta Ads + Google Ads + Companion
+
+**Estas tareas son propuestas y no están entregadas.** Se incorpora dependencia con [FNG-Companion](https://github.com/Ian9Franco/FNG-Companion).
+
+| ID | Prioridad | Estado | Tarea | Criterio de aceptación |
+| --- | --- | --- | --- | --- |
+| FNG-026 | P1 | Pendiente | Modelo de plataformas/cuentas por cliente | Un cliente puede vincular múltiples IDs Meta y Google; IDs sin identificar se pueden mapear manualmente |
+| FNG-027 | P1 | Pendiente | Registro de revisión por cuenta **y plataforma** | Una revisión Google no silencia una revisión Meta del mismo cliente |
+| FNG-028 | P1 | Pendiente | Ingesta autenticada de sesiones Companion | Idempotencia, RLS, origen verificado y sin sobrescritura del JSONB existente |
+| FNG-029 | P1 | Pendiente | Bandeja pasiva «sesiones sin documentar» | La sesión no marca revisión; desaparece/queda resuelta al registrar algo asociado |
+| FNG-030 | P1 | Pendiente | Plan semanal por cuenta/plataforma | Configurar días/horas de revisión, sin imponer revisión diaria a todas |
+| FNG-031 | P1 | Pendiente | Motor de sugerencias y snooze | Posponer mañana/semana siguiente/fecha, deduplicación, no molestar mientras escribe |
+| FNG-032 | P2 | Pendiente | Push al teléfono vía PWA | Opt-in, HTTPS, SW, push subscriptions, backend programado, prueba en dispositivo |
+| FNG-033 | P2 | Pendiente | Privacidad de avisos y retención | Ocultar nombres en pantalla bloqueada, borrar sesiones, límites de retención |
+| FNG-034 | P2 | Pendiente | Reportes multicanal | Separar Meta/Google, conservar formato A4 o ampliar con sección plataformas explícita |
+| FNG-035 | P1 | Pendiente | Separar sesiones observadas de hechos confirmados | Nunca reportar la visita como trabajo o cambio verificado automáticamente |
+
+**Dependencias:** primero resolver `FNG-004/005/010/014` (sincronización, conflictos y esquema); luego `FNG-026/027/028`; después sugerencias y notificaciones.
+

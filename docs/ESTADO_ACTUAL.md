@@ -89,3 +89,14 @@ La versión no debería considerarse apta para datos operativos hasta tener: bui
 | Revisión ≠ modificación | Revisar una cuenta sin cambios cuenta como revisión |
 | Nuevo lunes no borra pendientes | La planilla es un reporte, no la fuente de verdad |
 | Impresión A4 vertical | Reproduce el formato entregado por el equipo |
+
+## Ampliación de alcance: Google Ads y FNG Companion (2026-10-13)
+
+**Decisión documentada, no funcionalidad implementada en INFORMES FNG.** Se incorpora Google Ads como plataforma de primera clase en el diseño. Una empresa podrá vincular una o varias cuentas publicitarias a cualquiera de las dos plataformas. Las revisiones actuales siguen siendo registros cliente/fecha y las pantallas aún mencionan Meta Ads; falta migrar el modelo y la interfaz a `platform` + `ad_account`.
+
+Se creó el repositorio [FNG-Companion](https://github.com/Ian9Franco/FNG-Companion), con una propuesta de detectar sesiones desde Chrome. Al momento de este corte, **no hay ingesta, vínculo de cuentas, recordatorios automáticos ni Web Push funcional en esta PWA**.
+
+Se diseñaron dos fuentes de aviso: (1) sesión publicitaria detectada sin revisión/nota asociada después de un tiempo de espera; (2) revisión planificada y omitida, independientemente de si la extensión vio navegación. La ausencia de sesión **no prueba** que no se haya trabajado en otro navegador o dispositivo.
+
+Documentación: [COMPANION_INTEGRACION.md](COMPANION_INTEGRACION.md), [RECORDATORIOS.md](RECORDATORIOS.md).
+

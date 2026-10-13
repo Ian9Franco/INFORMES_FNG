@@ -151,3 +151,20 @@ Ver [backlog](docs/BACKLOG.md) para tareas y criterios de aceptación, y [roadma
 ## Convenciones de mantenimiento
 
 Registrar los cambios funcionales en [CHANGELOG.md](CHANGELOG.md), actualizar [estado actual](docs/ESTADO_ACTUAL.md) al incorporar capacidades y mover las tareas del backlog cuando se verifique su aceptación. Mantener PR pequeños, compilación verde y la migración SQL versionada en Git. **No fusionar el PR hasta validar compilación, autenticación, RLS, persistencia e impresión A4.**
+
+## Soporte planificado de Meta Ads y Google Ads
+
+**El código actual continúa siendo una bitácora genérica con textos y clientes, originalmente rotulada «Meta Ads». La diferenciación real de plataformas y los recordatorios inteligentes NO están implementados.**
+
+Se trabajará con el repositorio independiente [FNG-Companion](https://github.com/Ian9Franco/FNG-Companion), una extensión Chrome para detectar sesiones en **Meta Ads Manager y Google Ads** sin las Marketing APIs. Una sesión sugiere actividad, **no acredita modificaciones ni sustituye una revisión confirmada**.
+
+La relación prevista es **cliente comercial → cuentas publicitarias por plataforma → sesiones detectadas y revisiones declaradas**. Una misma empresa puede tener varias cuentas Meta y Google. Si una cuenta no revela su ID, quedará como desconocida hasta mapearla manualmente.
+
+Las alertas futuras tendrán dos orígenes: sesiones con documentación pendiente y revisiones **programadas** sin registro. No se exigirá revisar cada cuenta diariamente a menos que así se configure. Se definieron posponer para mañana/semana próxima/fecha personalizada, silencio mientras se registran notas y control de frecuencia.
+
+**Para recibir notificaciones en un teléfono no alcanza con instalar la PWA:** serán necesarios Web Push, service worker, permisos, suscripciones del dispositivo y un programador de avisos en el backend. No se han creado endpoints, tablas ni secrets de push.
+
+- [Contrato técnico con Companion](docs/COMPANION_INTEGRACION.md)
+- [Reglas futuras de recordatorios y push](docs/RECORDATORIOS.md)
+- [Repositorio Companion](https://github.com/Ian9Franco/FNG-Companion)
+
