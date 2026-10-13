@@ -2,7 +2,7 @@
 
 Aplicación de seguimiento **personal** de trabajo en Meta Ads para Fanger Design. Permite registrar revisiones por cliente y día, describir cambios u observaciones, gestionar pendientes y emitir la planilla semanal que se entrega los lunes.
 
-**Estado:** MVP en desarrollo, PR [#1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1) en borrador. **No se considera listo para producción.** Consultar [estado actual](docs/ESTADO_ACTUAL.md) y [limitaciones](#limitaciones-y-riesgos).
+**Estado:** MVP en desarrollo, PR [#1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1) en borrador. Build CI [aprobado](https://github.com/Ian9Franco/INFORMES_FNG/actions/runs/38448153350). **No se considera listo para producción.** Consultar [estado actual](docs/ESTADO_ACTUAL.md) y [limitaciones](#limitaciones-y-riesgos).
 
 ## Índice de documentación
 

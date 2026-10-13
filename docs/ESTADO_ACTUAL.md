@@ -62,6 +62,7 @@ No se usa `@supabase/ssr`, middleware/proxy de sesión ni Server Actions para op
 - **Confirmado en Supabase:** proyecto «Informes FnG» con referencia `zxhxerhksohymmyofvqb`; tabla `public.workspaces` existente y RLS habilitado.
 - **Confirmado en GitHub:** PR #1 abierto como borrador; la rama no está integrada en `main`.
 - **Build previo:** ejecución del 2026-10-13 [GitHub Actions #38447396426](https://github.com/Ian9Franco/INFORMES_FNG/actions/runs/38447396426) terminó en **failure** por `Property 'catch' does not exist on type 'PromiseLike<void>'` en `WorkspaceGate.tsx`. Se incluyó una corrección en esta iteración; verificar el check del nuevo commit antes de declarar la compilación aprobada.
+- **Build de esta iteración:** [GitHub Actions #38448153350](https://github.com/Ian9Franco/INFORMES_FNG/actions/runs/38448153350), **success** (instalación y `npm run build`). No equivale a pruebas funcionales del producto.
 - **Sin evidencia aún** de pruebas E2E de login, sincronización entre dos dispositivos, impresión física A4 ni instalación PWA en equipos reales.
 
 ## Riesgos y deuda técnica principales

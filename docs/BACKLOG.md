@@ -8,7 +8,7 @@
 
 | ID | Estado | Tarea | Criterio de aceptación |
 | --- | --- | --- | --- |
-| FNG-001 | En verificación | Corregir TypeScript de `WorkspaceGate` | `npm run build` pasa en CI |
+| FNG-001 | Hecho | Corregir TypeScript de `WorkspaceGate` | `npm run build` pasa en CI |
 | FNG-002 | Pendiente | Verificar login y logout con magic link | Entra, sale y reingresa en localhost y despliegue |
 | FNG-003 | Pendiente | Probar RLS para dos usuarios | Usuario A no lee ni modifica datos de B |
 | FNG-004 | Pendiente | Evitar sobreescritura silenciosa por estados antiguos | Dos pestañas/dispositivos no pierden cambios, o hay bloqueo/conflicto explícito |

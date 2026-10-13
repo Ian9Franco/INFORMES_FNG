@@ -10,7 +10,7 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 
 ### Correcciones
 - Reemplazo de `.catch()` sobre un `PromiseLike` de consulta Supabase por un flujo `async/await` con captura de errores, para resolver el error de tipado detectado en CI.
-- Compilación posterior a esta corrección: verificar en el estado del PR; no se presupone exitosa.
+- Compilación posterior a la corrección: **aprobada** en [GitHub Actions #38448153350](https://github.com/Ian9Franco/INFORMES_FNG/actions/runs/38448153350).
 
 ## [0.2.0] — 2026-10-13
 
