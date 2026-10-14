@@ -2,9 +2,13 @@
 
 Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Las versiones listadas corresponden a **iteraciones de desarrollo**, no a releases publicados o tags de Git.
 
-## [Unreleased] — documentación y estabilización del PR #1
+## [Unreleased] — mejoras continuas
 
 ### Interfaz operativa
+- Registro rápido inline por cliente, «Sin cambios» en un toque con deshacer durante 8 segundos y filtros de pendientes/revisados.
+- Guardar fijo, «Guardar y siguiente» y Ctrl/⌘+Enter (Shift para siguiente); el modal detallado mantiene header/footer visibles sin recorrer todo el formulario.
+- Borradores locales por usuario/cliente/fecha, recuperables tras recarga y sin confirmar revisiones; bloqueo frente a una edición remota y carga explícita de la versión actual.
+- Chips estables al seleccionar, favoritas editables y última plataforma recordada por dispositivo; controles inertes durante la salida animada para evitar clics sobre el cliente anterior.
 - Persistencia por registros en `fng_records`, con versiones, RLS, vínculos externos únicos y validación en base de datos.
 - Sincronización Realtime por usuario, recuperación al volver a primer plano y cola durable con reintentos y resolución explícita de conflictos.
 - Históricos mensuales con consultas acotadas por fecha y exportaciones A4 normal/detallada.

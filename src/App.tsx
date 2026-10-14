@@ -11,6 +11,9 @@ import { ExternalLink } from 'lucide-react'
 import { monthBounds } from './sync/records'
 import CompanionAccess from './components/CompanionAccess'
 import QuickActions from './components/QuickActions'
+import ReviewDetailsFields from './components/ReviewDetailsFields'
+import RapidReviewSection from './components/RapidReviewSection'
+import { draftChanged, draftKey, nextPendingClient, readDrafts, reviewSignature, type ReviewDrafts } from './review-workflow'
 import { AnimatedChart } from './components/AnimatedSymbols'
 import { ACTION_SCHEMA_VERSION, describeReviewActions, validReviewActions, type ReviewAction } from './review-actions'
 import {
@@ -98,7 +101,12 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const [reportMonth, setReportMonth] = useState(() => keyDate(new Date()).slice(0, 7))
   const remoteRef = useRef(initialData)
   const formRevision = useRef<number | undefined>(undefined)
-  const [selected, setSelected] = useState<{ id: string; day: string } | null>(null)
+  const [selected, setSelected] = useState<{ id: string; day: string; mode: 'inline' | 'modal' } | null>(null)
+  const formBase = useRef<Review | undefined>(undefined)
+  const draftStorageKey = `fng-review-drafts:v1:${userId ?? 'local'}`
+  const [drafts, setDrafts] = useState<ReviewDrafts>(() => { try { return readDrafts(localStorage, draftStorageKey) } catch { return {} } })
+  const draftsRef = useRef(drafts)
+  const [undoReview, setUndoReview] = useState<Review | null>(null)
   const [actions, setActions] = useState('')
   const [actionEntries, setActionEntries] = useState<ReviewAction[]>([])
   const calm = useReducedMotion()
@@ -115,11 +123,14 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [dailySearch, setDailySearch] = useState('')
+  const [dailyFilter, setDailyFilter] = useState<'todos' | 'pendientes' | 'revisados'>('todos')
   const [closingReview, setClosingReview] = useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const saveBarRef = useRef<HTMLDivElement>(null)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rowScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scrollPositions = useRef<Partial<Record<Tab, number>>>({})
-  const selectedOpen = selected !== null
+  const selectedOpen = selected?.mode === 'modal'
   const documentTitle = reportTitle.trim() || 'Informe Ian'
 
   useEffect(() => { try { localStorage.setItem('informe-fng-report-title', reportTitle) } catch { /* Title remains usable without storage. */ } }, [reportTitle])
@@ -140,7 +151,30 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const weekLabel = `${format(days[0])} al ${format(days[5])} de ${date(days[5]).getFullYear()}`
   const reportLabel = reportPeriod === 'month' ? new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(date(monthRange.start)) : `Semana del ${weekLabel}`
   const longToday = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
-  const dailyClients = active.filter(item => item.name.toLocaleLowerCase('es').includes(dailySearch.trim().toLocaleLowerCase('es')))
+  const dailyClients = active.filter(item => item.name.toLocaleLowerCase('es').includes(dailySearch.trim().toLocaleLowerCase('es')) && (dailyFilter === 'todos' || db.reviews.some(review => review.clientId === item.id && review.date === today) === (dailyFilter === 'revisados')))
+
+  function updateDraft(key: string, draft: ReviewDrafts[string] | null) {
+    if (!draft && !draftsRef.current[key]) return
+    const next = { ...draftsRef.current }
+    if (draft) next[key] = draft
+    else delete next[key]
+    draftsRef.current = next
+    setDrafts(next)
+    try { localStorage.setItem(draftStorageKey, JSON.stringify(next)) } catch { setError('El borrador sigue en esta pantalla, pero no pudo guardarse en el dispositivo. Guardá la revisión antes de salir.') }
+  }
+
+  function stashDraft() {
+    if (!selected || closingReview) return
+    const draft = { clientId: selected.id, day: selected.day, base: formBase.current, actions, observations, actionEntries, pendingText, updatedAt: new Date().toISOString() }
+    if (selected.id) updateDraft(draftKey(selected.id, selected.day), draftChanged(draft) ? draft : null)
+  }
+
+  useEffect(() => { stashDraft() }, [selected, actions, observations, actionEntries, pendingText, closingReview])
+  useEffect(() => {
+    if (!undoReview) return
+    const timer = setTimeout(() => setUndoReview(null), 8000)
+    return () => clearTimeout(timer)
+  }, [undoReview])
 
   useEffect(() => {
     if (!initialData || initialData === remoteRef.current) return
@@ -150,13 +184,16 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   }, [initialData])
 
   useEffect(() => {
-    const end = date(week); end.setDate(end.getDate() + 7)
+    const periodWeek = tab === 'jornada' ? monday(new Date()) : week
+    const end = date(periodWeek); end.setDate(end.getDate() + 7)
     if (tab === 'informes' && reportPeriod === 'month') onPeriodChange?.(monthRange.start, monthRange.end)
-    else onPeriodChange?.(week, keyDate(end))
+    else onPeriodChange?.(periodWeek, keyDate(end))
   }, [tab, week, reportPeriod, reportMonth, onPeriodChange])
 
   function navigate(next: Tab) {
     if (next === tab || turningPage) return
+    if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current)
+    if (selected?.mode === 'inline') { stashDraft(); setSelected(null) }
     scrollPositions.current[tab] = window.scrollY
     setDirection(navItems.findIndex(item => item.id === next) > navItems.findIndex(item => item.id === tab) ? 1 : -1)
     setTurningPage(!calm)
@@ -166,8 +203,9 @@ export default function App({ initialData, onChange, storageMode = 'local', user
 
   function closeReview(force = false) {
     if (closingReview) return
-    const dirty = actions !== (current?.actions ?? '') || observations !== (current?.observations ?? '') || pendingText.trim() !== '' || JSON.stringify(actionEntries) !== JSON.stringify(current?.actionEntries ?? [])
-    if (!force && dirty && !window.confirm('Tenés cambios sin guardar. ¿Cerrar la revisión y descartarlos?')) return
+    if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current)
+    if (!force) stashDraft()
+    if (selected?.mode === 'inline') { setSelected(null); return }
     setClosingReview(true)
     closeTimer.current = setTimeout(() => {
       setSelected(null)
@@ -202,7 +240,16 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     }
   }, [selectedOpen])
 
-  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current) }, [])
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current) }, [])
+  useEffect(() => {
+    if (selected?.mode !== 'inline') return
+    const viewport = window.visualViewport
+    const adjust = () => { if (viewport?.scale === 1) saveBarRef.current?.style.setProperty('--rapid-keyboard-inset', `${Math.max(0, innerHeight - viewport.height - viewport.offsetTop)}px`) }
+    adjust()
+    viewport?.addEventListener('resize', adjust)
+    viewport?.addEventListener('scroll', adjust)
+    return () => { viewport?.removeEventListener('resize', adjust); viewport?.removeEventListener('scroll', adjust) }
+  }, [selected?.mode])
 
   const filteredClients = useMemo(() => {
     const query = clientSearch.trim().toLocaleLowerCase('es')
@@ -233,24 +280,32 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     return db.reviews.find(reviewItem => reviewItem.clientId === clientId && reviewItem.date === day)
   }
 
-  function openReview(clientId: string, day: string) {
+  function openReview(clientId: string, day: string, mode: 'inline' | 'modal' = 'modal', discardDraft = false) {
     if (db.closed.includes(monday(date(day)))) {
       setNotice('Semana cerrada. Reabrila desde Semana para editar.')
       return
     }
-    const reviewItem = findReview(clientId, day)
-    formRevision.current = reviewItem?.revision
-    setSelected({ id: clientId, day })
-    setActions(reviewItem?.actions ?? '')
-    setActionEntries(validReviewActions(reviewItem?.actionEntries) ? reviewItem.actionEntries : [])
-    setObservations(reviewItem?.observations ?? '')
-    setPendingText('')
+    stashDraft()
+    if (discardDraft) updateDraft(draftKey(clientId, day), null)
+    const reviewItem = dbRef.current.reviews.find(item => item.clientId === clientId && item.date === day)
+    const draft = discardDraft ? undefined : draftsRef.current[draftKey(clientId, day)]
+    formBase.current = draft ? draft.base : reviewItem
+    formRevision.current = formBase.current?.revision
+    setSelected({ id: clientId, day, mode })
+    setActions(draft?.actions ?? reviewItem?.actions ?? '')
+    setActionEntries(draft?.actionEntries ?? (validReviewActions(reviewItem?.actionEntries) ? reviewItem.actionEntries : []))
+    setObservations(draft?.observations ?? reviewItem?.observations ?? '')
+    setPendingText(draft?.pendingText ?? '')
+    if (mode === 'inline') {
+      if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current)
+      rowScrollTimer.current = setTimeout(() => document.querySelector<HTMLElement>(`.review-item[data-client-id="${CSS.escape(clientId)}"]`)?.scrollIntoView({ block: 'start', behavior: calm ? 'instant' : 'smooth' }), calm ? 0 : 220)
+    }
   }
 
-  function saveReview() {
+  function saveReview(andNext = false) {
     if (!selected?.id || closingReview || db.closed.includes(monday(date(selected.day))) || !validReviewActions(actionEntries)) return
-    const previous = findReview(selected.id, selected.day)
-    if (previous?.revision !== formRevision.current) { setNotice('Esta revisión cambió en otro dispositivo. Cerrá y volvé a abrirla para cargar la versión actual; tus notas siguen en el formulario.'); return }
+    const previous = dbRef.current.reviews.find(item => item.clientId === selected.id && item.date === selected.day)
+    if (previous?.revision !== formRevision.current || reviewSignature(previous) !== reviewSignature(formBase.current)) { setNotice('Esta revisión cambió en otro dispositivo. Tu borrador está conservado; copiá tus notas y cargá la versión actual antes de guardar.'); return }
     const item: Review = {
       id: previous?.id ?? uid(),
       clientId: selected.id,
@@ -264,15 +319,51 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     setDb(currentDb => ({
       ...currentDb,
       reviews: [...currentDb.reviews.filter(reviewItem => reviewItem.clientId !== selected.id || reviewItem.date !== selected.day), item],
+      pending: pendingText.trim() ? [...currentDb.pending, { id: uid(), clientId: selected.id, text: pendingText.trim(), resolved: false }] : currentDb.pending,
     }))
-    closeReview(true)
+    updateDraft(draftKey(selected.id, selected.day), null)
+    const next = andNext ? nextPendingClient(tab === 'jornada' ? dailyClients : active, dbRef.current.reviews, selected.day, selected.id) : undefined
+    if (next) {
+      // Reset the saved form before opening the next client; never re-stash it.
+      const draft = draftsRef.current[draftKey(next.id, selected.day)]
+      formBase.current = draft?.base
+      formRevision.current = draft?.base?.revision
+      setSelected({ ...selected, id: next.id })
+      setActions(draft?.actions ?? ''); setObservations(draft?.observations ?? '')
+      setActionEntries(draft?.actionEntries ?? []); setPendingText(draft?.pendingText ?? '')
+      if (selected.mode === 'inline') {
+        if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current)
+        rowScrollTimer.current = setTimeout(() => {
+        const row = document.querySelector<HTMLElement>(`.review-item[data-client-id="${CSS.escape(next.id)}"]`)
+        row?.scrollIntoView({ block: 'start', behavior: calm ? 'instant' : 'smooth' })
+        row?.querySelector<HTMLButtonElement>('.review-row')?.focus({ preventScroll: true })
+        }, calm ? 0 : 220)
+      }
+      else if (dialogRef.current) dialogRef.current.querySelector('.review-modal-body')?.scrollTo({ top: 0 })
+    } else closeReview(true)
     setNotice(previous ? 'Revisión actualizada' : 'Revisión registrada')
+  }
+
+  function reviewWithoutChanges(clientId: string) {
+    if (dbRef.current.closed.includes(monday(date(today))) || dbRef.current.reviews.some(item => item.clientId === clientId && item.date === today) || draftsRef.current[draftKey(clientId, today)]) return
+    const item: Review = { id: uid(), clientId, date: today, createdAt: new Date().toISOString(), actions: '', observations: '', actionSchemaVersion: ACTION_SCHEMA_VERSION, actionEntries: [] }
+    setDb(currentDb => ({ ...currentDb, reviews: [...currentDb.reviews, item] }))
+    setUndoReview(item)
+  }
+
+  function undoQuickReview() {
+    if (!undoReview) return
+    const latest = dbRef.current.reviews.find(item => item.id === undoReview.id)
+    if (dbRef.current.closed.includes(monday(date(undoReview.date))) || reviewSignature(latest) !== reviewSignature(undoReview)) { setNotice('La revisión cambió o la semana se cerró. No se deshizo para conservar ese cambio.'); setUndoReview(null); return }
+    setDb(currentDb => ({ ...currentDb, reviews: currentDb.reviews.filter(item => item.id !== undoReview.id) }))
+    setUndoReview(null); setNotice('Revisión sin cambios deshecha')
   }
 
   function removeReview() {
     if (!current) return
     if (!window.confirm('¿Quitar esta revisión? Las observaciones asociadas también se eliminarán.')) return
     setDb(currentDb => ({ ...currentDb, reviews: currentDb.reviews.filter(reviewItem => reviewItem.id !== current.id) }))
+    if (selected) updateDraft(draftKey(selected.id, selected.day), null)
     closeReview(true)
     setNotice('Revisión eliminada')
   }
@@ -285,6 +376,15 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     }))
     setPendingText('')
     setNotice('Pendiente agregado')
+  }
+
+  function reviewShortcut(event: React.KeyboardEvent) {
+    if (event.key !== 'Enter' || (!event.ctrlKey && !event.metaKey) || event.nativeEvent.isComposing) return
+    event.preventDefault(); saveReview(event.shiftKey)
+  }
+
+  function reloadReview() {
+    if (selected && window.confirm('¿Descartar este borrador y cargar la revisión actual? Copiá antes las notas que quieras conservar.')) openReview(selected.id, selected.day, selected.mode, true)
   }
 
   function resolvePending(pendingId: string) {
@@ -434,15 +534,28 @@ export default function App({ initialData, onChange, storageMode = 'local', user
         <div className="dashboard-grid">
           <section className="panel daily-list">
             <div className="panel-heading"><div><span className="section-kicker">CUENTAS ACTIVAS</span><h2>Revisiones de hoy</h2></div><button className="text-button" onClick={() => navigate('semana')}>Ver semana <Icon name="chevron-right" /></button></div>
-            <div className="search-box daily-search"><Icon name="search" /><input type="search" value={dailySearch} onChange={event => setDailySearch(event.target.value)} placeholder="Buscar en tus clientes" aria-label="Buscar en la jornada" /></div>
+            <div className="search-box daily-search"><Icon name="search" /><input type="search" value={dailySearch} onChange={event => { if (selected?.mode === 'inline') closeReview(); setDailySearch(event.target.value) }} placeholder="Buscar en tus clientes" aria-label="Buscar en la jornada" /></div>
+            <div className="segmented daily-filter" aria-label="Filtrar revisiones de hoy">{(['todos', 'pendientes', 'revisados'] as const).map(filter => <button key={filter} aria-pressed={dailyFilter === filter} className={dailyFilter === filter ? 'active' : ''} onClick={() => { if (selected?.mode === 'inline') closeReview(); setDailyFilter(filter) }}>{filter === 'todos' ? 'Todos' : filter === 'pendientes' ? 'Por revisar' : 'Revisados'}</button>)}</div>
             {dailyClients.length ? <div className="review-list">{dailyClients.map(clientItem => {
               const reviewItem = findReview(clientItem.id, today)
-              return <button key={clientItem.id} className="review-row" onClick={() => openReview(clientItem.id, today)}>
+              const expanded = selected?.mode === 'inline' && selected.id === clientItem.id && selected.day === today
+              const hasDraft = Boolean(drafts[draftKey(clientItem.id, today)])
+              const dayClosed = db.closed.includes(monday(date(today)))
+              return <article key={clientItem.id} data-client-id={clientItem.id} className={`review-item ${expanded ? 'is-expanded' : ''}`}>
+              <div className="review-row-header"><button className="review-row" aria-expanded={expanded} aria-controls={`rapid-${clientItem.id}`} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline')}>
                 <span className={`review-state ${reviewItem ? 'done' : ''}`}>{reviewItem ? <Icon name="check" /> : <span />}</span>
                 <span className="review-name"><strong>{clientItem.name}</strong><small>{reviewItem ? (describeReviewActions(reviewItem) || reviewItem.observations || 'Revisión registrada') : 'Todavía sin revisar'}</small></span>
-                <span className={`state-pill ${reviewItem ? 'done' : ''}`}>{reviewItem ? 'Revisado' : 'Pendiente'}</span>
+                <span className={`state-pill ${reviewItem ? 'done' : ''}`}>{hasDraft ? 'Borrador' : reviewItem ? 'Revisado' : 'Pendiente'}</span>
                 <Icon name="chevron-right" />
               </button>
+              <div className="review-row-tools">{!reviewItem ? <button type="button" className="one-touch-review" disabled={dayClosed || hasDraft || expanded} onClick={() => reviewWithoutChanges(clientItem.id)} aria-label={`Revisado sin cambios: ${clientItem.name}`}><Icon name="check" size={15} /><span>Sin cambios</span></button> : null}<button type="button" className="quick-register" disabled={dayClosed} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline')} aria-label={`${expanded ? 'Cerrar registro' : reviewItem ? 'Editar revisión' : 'Registrar acciones'}: ${clientItem.name}`}>{expanded ? 'Cerrar' : hasDraft ? 'Continuar' : reviewItem ? 'Editar' : 'Registrar'}</button></div></div>
+              <AnimatePresence initial={false}>{expanded ? <RapidReviewSection id={`rapid-${clientItem.id}`} key="editor" label={`Registro rápido de ${clientItem.name}`} onKeyDown={reviewShortcut}>
+                <div className="rapid-review-heading"><span>Borrador en este dispositivo · confirmá para completar</span><button type="button" className="text-button" onClick={() => setSelected({ ...selected!, mode: 'modal' })}>Edición detallada <Icon name="chevron-right" size={14} /></button></div>
+                {reviewSignature(current) !== reviewSignature(formBase.current) ? <div className="draft-conflict" role="status">La revisión cambió. Conservamos tu borrador.<button type="button" onClick={reloadReview}>Cargar versión actual</button></div> : null}
+                <QuickActions value={actionEntries} onChange={setActionEntries} compact storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
+                <details className="rapid-details"><summary>Notas y pendientes{actions || observations || pendingText ? ' · con contenido' : ' · opcional'}</summary><ReviewDetailsFields actions={actions} observations={observations} pendingText={pendingText} onActions={setActions} onObservations={setObservations} onPending={setPendingText} onAddPending={addPending} /></details>
+              </RapidReviewSection> : null}</AnimatePresence>
+              </article>
             })}</div> : <EmptyState icon="users" title={active.length ? 'Sin coincidencias' : 'Todavía no hay clientes'} text={active.length ? 'Probá con otro nombre.' : 'Agregá tu primer cliente para comenzar el seguimiento.'} />}
           </section>
 
@@ -507,14 +620,18 @@ export default function App({ initialData, onChange, storageMode = 'local', user
 
     <footer className="site-footer screen"><a href="https://ian-pontorno-portfolio.vercel.app" target="_blank" rel="noopener noreferrer">© {new Date().getFullYear()} Ian Pontorno<span>Diseño y desarrollo</span><ExternalLink size={13} aria-hidden="true" /></a><a className="repository-link" href="https://github.com/Ian9Franco/INFORMES_FNG" target="_blank" rel="noopener noreferrer" aria-label="Ver el código de Informes FNG en GitHub"><svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.49c-2.23.48-2.7-.95-2.7-.95-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.22.82 1.22.82.71 1.22 1.87.87 2.33.67.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.58.82-2.14-.08-.2-.36-1.02.08-2.12 0 0 .67-.22 2.2.82A7.65 7.65 0 0 1 8 3.87c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.14 0 3.07-1.87 3.75-3.65 3.95.29.25.54.74.54 1.49v2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z" /></svg><span>GitHub</span></a></footer>
 
-    {selected ? <dialog ref={dialogRef} className={`review-modal screen ${closingReview ? 'is-closing' : ''}`} aria-labelledby="review-title" onCancel={event => { event.preventDefault(); closeReview() }} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeReview() } }}>
+    {selected?.mode === 'inline' ? <div ref={saveBarRef} className="rapid-save-bar screen" onKeyDown={reviewShortcut}><div><strong>{client?.name}</strong><small>Borrador local · Ctrl/⌘ + Enter para guardar</small></div><button className="secondary-button" onClick={() => saveReview()} disabled={!client}>Guardar</button><button className="primary-button" onClick={() => saveReview(true)} disabled={!client}>Guardar y siguiente <Icon name="chevron-right" /></button></div> : null}
+    {undoReview ? <div className="quick-undo screen" role="status"><span>{clients.find(item => item.id === undoReview.clientId)?.name} · revisado sin cambios</span><button type="button" onClick={undoQuickReview}>Deshacer</button></div> : null}
+
+    {selected?.mode === 'modal' ? <dialog ref={dialogRef} className={`review-modal screen ${closingReview ? 'is-closing' : ''}`} aria-labelledby="review-title" onKeyDown={reviewShortcut} onCancel={event => { event.preventDefault(); closeReview() }} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeReview() } }}>
         <header><div><span className="section-kicker">REVISIÓN · {format(selected.day)}</span><h2 id="review-title">{client?.name ?? 'Nueva revisión'}</h2><p>Una revisión también cuenta si no hiciste cambios.</p></div><button className="icon-button" onClick={() => closeReview()} aria-label="Cerrar"><Icon name="close" /></button></header>
-        <ClientPicker clients={active} value={selected.id} onChange={id => { if ((actions || observations || pendingText || actionEntries.length) && !window.confirm('¿Cambiar de cliente y descartar lo que estás escribiendo?')) return; openReview(id, selected.day) }} />
-        <QuickActions value={actionEntries} onChange={setActionEntries} />
-        <label htmlFor="review-actions">Otros detalles</label><textarea id="review-actions" aria-label="Otros detalles" rows={2} value={actions} onChange={event => setActions(event.target.value)} placeholder="Algo más que quieras registrar…" />
-        <label htmlFor="review-observations">Observaciones</label><textarea id="review-observations" aria-label="Observaciones" rows={4} value={observations} onChange={event => setObservations(event.target.value)} placeholder="Qué detectaste y qué conviene seguir…" />
-        <div className="pending-entry"><label htmlFor="pending-note">Nuevo pendiente</label><div><input id="pending-note" value={pendingText} onChange={event => setPendingText(event.target.value)} placeholder="Ej.: revisar CPA el jueves" /><button className="secondary-button" onClick={addPending} disabled={!client || !pendingText.trim()}><Icon name="plus" />Agregar</button></div></div>
-        <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : <span />}<div><button className="secondary-button" onClick={() => closeReview()}>Cancelar</button><button className="primary-button" disabled={!client || closingReview} onClick={saveReview}><Icon name="check" />Guardar revisión</button></div></footer>
+        <div className="review-modal-body">
+        {reviewSignature(current) !== reviewSignature(formBase.current) ? <div className="draft-conflict" role="status">La revisión cambió. Conservamos tu borrador.<button type="button" onClick={reloadReview}>Cargar versión actual</button></div> : null}
+        <ClientPicker clients={active} value={selected.id} onChange={id => openReview(id, selected.day)} />
+        <QuickActions value={actionEntries} onChange={setActionEntries} storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
+        <ReviewDetailsFields actions={actions} observations={observations} pendingText={pendingText} onActions={setActions} onObservations={setObservations} onPending={setPendingText} onAddPending={addPending} />
+        </div>
+        <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : null}<div><button className="secondary-button" onClick={() => closeReview()}>Salir</button><button className="primary-button" disabled={!client || closingReview} onClick={() => saveReview()}><Icon name="check" />Guardar revisión</button><button className="secondary-button" disabled={!client || closingReview} onClick={() => saveReview(true)}>Guardar y siguiente</button></div></footer>
     </dialog> : null}
 
     <NotebookReport store={db} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} />

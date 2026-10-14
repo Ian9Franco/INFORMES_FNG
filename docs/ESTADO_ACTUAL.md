@@ -1,6 +1,6 @@
 # Estado actual — Informes FNG
 
-**Corte documental:** 2026-10-13.  
+**Corte documental:** 2026-10-14.
 **Repositorio:** [Ian9Franco/INFORMES_FNG](https://github.com/Ian9Franco/INFORMES_FNG)  
 **Implementación actual:** rama `main`; el [PR fundacional #1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1) ya fue fusionado.
 **Madurez:** MVP técnico / prototipo funcional, **no validado para producción**.
@@ -10,6 +10,8 @@
 Bitácora personal de optimización y revisiones de Meta Ads para organizar el trabajo diario. La salida requerida por el equipo es una planilla **A4 vertical** de clientes × lunes-sábado, que se entrega completa los lunes, más un informe extendido opcional. La nueva semana no debe borrar el historial ni los pendientes de semanas anteriores.
 
 ## Inventario de capacidades (según código)
+
+El flujo diario incorpora [registro rápido](REGISTRO_RAPIDO.md): filas desplegables, confirmación sin cambios, guardar fijo/siguiente, favoritas y borradores locales. La persistencia y sincronización actuales se describen en [Sincronización v1](SINCRONIZACION_V1.md).
 
 | Área | Estado | Detalle |
 | --- | --- | --- |

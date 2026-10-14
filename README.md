@@ -149,6 +149,8 @@ Ver [backlog](docs/BACKLOG.md) para tareas y criterios de aceptación, y [roadma
 
 ## Convenciones de mantenimiento
 
+El registro diario tiene un [modo rápido](docs/REGISTRO_RAPIDO.md) dentro de cada cliente, con guardar fijo, siguiente y borradores locales sin confirmar. El formulario completo permanece disponible para edición detallada.
+
 Registrar los cambios funcionales en [CHANGELOG.md](CHANGELOG.md), actualizar [estado actual](docs/ESTADO_ACTUAL.md) al incorporar capacidades y mover las tareas del backlog cuando se verifique su aceptación. Mantener PR pequeños, compilación verde y la migración SQL versionada en Git. **No fusionar el PR hasta validar compilación, autenticación, RLS, persistencia e impresión A4.**
 
 ## Soporte planificado de Meta Ads y Google Ads
