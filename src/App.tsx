@@ -8,6 +8,8 @@ import NotebookReport from './components/NotebookReport'
 import { reconcileAccounts } from './account-catalog'
 import { newClient, sortClients } from './clients'
 import { ExternalLink } from 'lucide-react'
+import { monthBounds } from './sync/records'
+import CompanionAccess from './components/CompanionAccess'
 import QuickActions from './components/QuickActions'
 import { AnimatedChart } from './components/AnimatedSymbols'
 import { ACTION_SCHEMA_VERSION, describeReviewActions, validReviewActions, type ReviewAction } from './review-actions'
@@ -76,12 +78,26 @@ function EmptyState({ icon, title, text }: { icon: IconName; title: string; text
   return <div className="empty-state"><span><Icon name={icon} size={22} /></span><h3>{title}</h3><p>{text}</p></div>
 }
 
-export default function App({ initialData, onChange, storageMode = 'local' }: { initialData?: Store; onChange?: (data: Store) => void; storageMode?: 'local' | 'cloud' }) {
-  const [db, setDb] = useState<Store>(() => { const store = reconcileAccounts(initialData ?? load()); return { ...store, clients: sortClients(store.clients) } })
+export default function App({ initialData, onChange, storageMode = 'local', userId, onPeriodChange, onExport, onImport }: { initialData?: Store; onChange?: (data: Store) => void; storageMode?: 'local' | 'cloud'; userId?: string; onPeriodChange?: (start: string, end: string) => void; onExport?: () => Promise<Store>; onImport?: (store: Store) => Promise<void> }) {
+  const [db, setDbState] = useState<Store>(() => { const store = reconcileAccounts(initialData ?? load()); return { ...store, clients: sortClients(store.clients) } })
+  const dbRef = useRef(db)
+  dbRef.current = db
+  const firstPersistence = useRef(true)
+  function setDb(update: Store | ((current: Store) => Store)) {
+    const next = typeof update === 'function' ? update(dbRef.current) : update
+    dbRef.current = next
+    setDbState(next)
+    // Persist to the durable outbox in the event handler, before any remote render.
+    onChange?.(next)
+  }
   const [tab, setTab] = useState<Tab>('jornada')
   const [direction, setDirection] = useState(1)
   const [turningPage, setTurningPage] = useState(false)
   const [week, setWeek] = useState(() => monday(new Date()))
+  const [reportPeriod, setReportPeriod] = useState<'week' | 'month'>('week')
+  const [reportMonth, setReportMonth] = useState(() => keyDate(new Date()).slice(0, 7))
+  const remoteRef = useRef(initialData)
+  const formRevision = useRef<number | undefined>(undefined)
   const [selected, setSelected] = useState<{ id: string; day: string } | null>(null)
   const [actions, setActions] = useState('')
   const [actionEntries, setActionEntries] = useState<ReviewAction[]>([])
@@ -114,14 +130,30 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
   const active = clients.filter(clientItem => clientItem.active)
   const closed = db.closed.includes(week)
   const inWeek = db.reviews.filter(reviewItem => days.includes(reviewItem.date))
+  const monthRange = monthBounds(reportMonth)
+  const reportReviews = reportPeriod === 'month' ? db.reviews.filter(review => review.date >= monthRange.start && review.date < monthRange.end) : inWeek
   const pending = db.pending.filter(item => !item.resolved)
   const reviewsToday = active.filter(clientItem => db.reviews.some(reviewItem => reviewItem.clientId === clientItem.id && reviewItem.date === today)).length
   const completion = active.length ? Math.round((reviewsToday / active.length) * 100) : 0
   const current = selected ? db.reviews.find(reviewItem => reviewItem.clientId === selected.id && reviewItem.date === selected.day) : undefined
   const client = selected ? db.clients.find(clientItem => clientItem.id === selected.id) : undefined
   const weekLabel = `${format(days[0])} al ${format(days[5])} de ${date(days[5]).getFullYear()}`
+  const reportLabel = reportPeriod === 'month' ? new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(date(monthRange.start)) : `Semana del ${weekLabel}`
   const longToday = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
   const dailyClients = active.filter(item => item.name.toLocaleLowerCase('es').includes(dailySearch.trim().toLocaleLowerCase('es')))
+
+  useEffect(() => {
+    if (!initialData || initialData === remoteRef.current) return
+    remoteRef.current = initialData
+    dbRef.current = initialData
+    setDbState(initialData)
+  }, [initialData])
+
+  useEffect(() => {
+    const end = date(week); end.setDate(end.getDate() + 7)
+    if (tab === 'informes' && reportPeriod === 'month') onPeriodChange?.(monthRange.start, monthRange.end)
+    else onPeriodChange?.(week, keyDate(end))
+  }, [tab, week, reportPeriod, reportMonth, onPeriodChange])
 
   function navigate(next: Tab) {
     if (next === tab || turningPage) return
@@ -183,13 +215,13 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
 
   useEffect(() => {
     try {
-      persist(db)
-      onChange?.(db)
+      if (!userId) persist(db)
+      if (firstPersistence.current) { firstPersistence.current = false; onChange?.(db) }
       setError('')
     } catch {
       setError('No se pudieron guardar los datos. Exportá una copia de seguridad.')
     }
-  }, [db, onChange])
+  }, [db, onChange, userId])
 
   useEffect(() => {
     if (!notice) return
@@ -207,6 +239,7 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
       return
     }
     const reviewItem = findReview(clientId, day)
+    formRevision.current = reviewItem?.revision
     setSelected({ id: clientId, day })
     setActions(reviewItem?.actions ?? '')
     setActionEntries(validReviewActions(reviewItem?.actionEntries) ? reviewItem.actionEntries : [])
@@ -217,6 +250,7 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
   function saveReview() {
     if (!selected?.id || closingReview || db.closed.includes(monday(date(selected.day))) || !validReviewActions(actionEntries)) return
     const previous = findReview(selected.id, selected.day)
+    if (previous?.revision !== formRevision.current) { setNotice('Esta revisión cambió en otro dispositivo. Cerrá y volvé a abrirla para cargar la versión actual; tus notas siguen en el formulario.'); return }
     const item: Review = {
       id: previous?.id ?? uid(),
       clientId: selected.id,
@@ -300,8 +334,10 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
     setWeek(keyDate(next))
   }
 
-  function exportBackup() {
-    const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' })
+  async function exportBackup() {
+    let snapshot: Store
+    try { snapshot = onExport ? await onExport() : db } catch { setError('No se pudo descargar el respaldo completo. Revisá la conexión.'); return }
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
@@ -321,7 +357,7 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
       const { toPng } = await import('html-to-image')
       const image = await toPng(paper, { pixelRatio: 3.125, backgroundColor: '#ffffff', skipFonts: true })
       const anchor = document.createElement('a')
-      anchor.download = `${documentTitle.replace(/[<>:"/\\|?*]/g, '-')} - ${week} - ${printMode === 'grilla' ? 'semanal' : 'detallado'}.png`
+      anchor.download = `${documentTitle.replace(/[<>:"/\\|?*]/g, '-')} - ${reportPeriod === 'month' ? reportMonth : week} - ${printMode === 'grilla' ? 'semanal' : 'detallado'}.png`
       anchor.href = image
       anchor.click()
       setNotice('Informe PNG descargado')
@@ -331,13 +367,14 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
   }
 
   function importBackup(file: File) {
-    file.text().then(content => {
+    file.text().then(async content => {
       const value: unknown = JSON.parse(content)
       if (!value || typeof value !== 'object' || !('clients' in value) || !('reviews' in value) || !('pending' in value) || !('closed' in value) || !Array.isArray(value.clients) || !Array.isArray(value.reviews) || !Array.isArray(value.pending) || !Array.isArray(value.closed)) throw Error('Formato inválido')
       if (value.reviews.some(item => !item || typeof item !== 'object' || ('actionEntries' in item && (!validReviewActions(item.actionEntries) || item.actionSchemaVersion !== ACTION_SCHEMA_VERSION)))) throw Error('Acciones inválidas')
       if (window.confirm('¿Reemplazar todos los datos por este respaldo?')) {
         const store = reconcileAccounts(value as Store)
-        setDb({ ...store, clients: sortClients(store.clients) })
+        if (onImport) await onImport(store)
+        else setDb({ ...store, clients: sortClients(store.clients) })
         setNotice('Respaldo restaurado')
       }
     }).catch(() => setError('El respaldo no es válido.'))
@@ -382,6 +419,7 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
       {notice ? <div role="status" className="toast"><Icon name="check" />{notice}</div> : null}
 
       {tab === 'jornada' ? <>
+        {(db.activity ?? []).some(event => event.status === 'pending' && event.date === today) ? <section className="panel activity-inbox"><div className="panel-heading"><div><span className="section-kicker">COMPANION</span><h2>Actividad de tu PC</h2><p>Sesiones observadas; confirmá la revisión para completar el día.</p></div></div>{(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).map(event => <article key={event.id}><div><strong>{clients.find(client => client.id === event.clientId)?.name ?? `Cuenta sin vincular: ${event.accountCandidate ?? 'sin ID'}`}</strong><p>{event.platform === 'meta_ads' ? 'Meta Ads' : 'Google Ads'} · {Math.floor(event.focusedMs / 60000)} min estimados · {event.navigationSignals} señales</p></div>{event.clientId ? <button className="secondary-button" onClick={() => openReview(event.clientId!, event.date)}>{findReview(event.clientId, event.date) ? 'Ver revisión' : 'Registrar revisión'}</button> : null}<button className="icon-button" aria-label="Descartar sesión" onClick={() => setDb(currentDb => ({ ...currentDb, activity: currentDb.activity?.map(item => item.id === event.id ? { ...item, status: 'dismissed' } : item) }))}><Icon name="close" /></button></article>)}</section> : null}
         <section className="hero-panel">
           <div><span className="section-kicker">PROGRESO DEL DÍA</span><h2>{completion === 100 && active.length ? 'Jornada completa' : 'Seguimiento en curso'}</h2><p>{reviewsToday} de {active.length} clientes activos revisados.</p></div>
           <div className="progress-ring" style={{ '--progress': `${completion * 3.6}deg` } as React.CSSProperties}><span><b>{completion}%</b><small>completo</small></span></div>
@@ -429,6 +467,7 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
       </section> : null}
 
       {tab === 'clientes' ? <>
+        {storageMode === 'cloud' ? <CompanionAccess /> : null}
         <section className="panel client-toolbar">
           <form className="add-client" onSubmit={addClient}><span className="field-label">Nuevo cliente</span><div className="new-client-fields"><label htmlFor="new-client">Nombre<input id="new-client" value={newName} onChange={event => { setNewName(event.target.value); setNewClientError('') }} placeholder="Nombre de la empresa" required maxLength={120} /></label><label htmlFor="new-account-id">ID de cuenta publicitaria (Meta)<input id="new-account-id" type="text" inputMode="numeric" value={newAccountId} onChange={event => { setNewAccountId(event.target.value); setNewClientError('') }} placeholder="Ej.: 2980180415592669" required maxLength={30} aria-describedby="new-client-help" aria-invalid={Boolean(newClientError)} /></label><button className="primary-button" type="submit" disabled={!newName.trim() || !newAccountId.trim()}><Icon name="plus" />Agregar cliente</button></div><p className="new-client-help" id="new-client-help">Copiá el ID de la cuenta en Meta. Se usará para identificar al cliente desde Companion.</p>{newClientError ? <p className="new-client-error" role="alert">{newClientError}</p> : null}</form>
           <div className="backup-actions"><span>Respaldo de datos</span><div><button className="secondary-button" onClick={exportBackup}><Icon name="download" />Exportar</button><label className="secondary-button file-button"><Icon name="upload" />Importar<input type="file" accept=".json,application/json" onChange={event => { const file = event.target.files?.[0]; if (file) importBackup(file); event.target.value = '' }} /></label></div></div>
@@ -452,16 +491,17 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
 
       {tab === 'informes' ? <div className="reports-layout">
         <section className="panel report-controls">
-          <div><span className="section-kicker">PERÍODO</span><h2>Semana del {weekLabel}</h2></div>
-          <WeekPicker label={weekLabel} onPrevious={() => changeWeek(-1)} onNext={() => changeWeek(1)} />
+          <div><span className="section-kicker">PERÍODO</span><h2>{reportLabel}</h2></div>
+          <div className="segmented" aria-label="Período del informe"><button className={reportPeriod === 'week' ? 'active' : ''} onClick={() => setReportPeriod('week')}>Semanal</button><button className={reportPeriod === 'month' ? 'active' : ''} onClick={() => setReportPeriod('month')}>Histórico mensual</button></div>
+          {reportPeriod === 'week' ? <WeekPicker label={weekLabel} onPrevious={() => changeWeek(-1)} onNext={() => changeWeek(1)} /> : <label className="report-title-label">Mes<input type="month" className="report-title-input" value={reportMonth} onChange={event => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) setReportMonth(event.target.value) }} /></label>}
           <label className="report-title-label" htmlFor="report-title">Título del documento<input className="report-title-input" id="report-title" value={reportTitle} maxLength={80} onChange={event => setReportTitle(event.target.value)} placeholder="Informe Ian" /></label>
           <div className="report-mode"><span className="section-kicker">FORMATO DEL INFORME</span><button className={printMode === 'grilla' ? 'active' : ''} onClick={() => setPrintMode('grilla')}><span><Icon name="calendar" /></span><div><strong>Planilla semanal</strong><small>Matriz de clientes por día</small></div><i>{printMode === 'grilla' ? <Icon name="check" size={14} /> : null}</i></button><button className={printMode === 'detalle' ? 'active' : ''} onClick={() => setPrintMode('detalle')}><span><Icon name="report" /></span><div><strong>Informe detallado</strong><small>Acciones y observaciones</small></div><i>{printMode === 'detalle' ? <Icon name="check" size={14} /> : null}</i></button></div>
-          <div className="report-summary"><div><span>Revisiones</span><strong>{inWeek.length}</strong></div><div><span>Clientes cubiertos</span><strong>{new Set(inWeek.map(item => item.clientId)).size}</strong></div><div><span>Pendientes</span><strong>{pending.length}</strong></div></div>
+          <div className="report-summary"><div><span>Revisiones</span><strong>{reportReviews.length}</strong></div><div><span>Clientes cubiertos</span><strong>{new Set(reportReviews.map(item => item.clientId)).size}</strong></div><div><span>Pendientes</span><strong>{pending.length}</strong></div></div>
           <div className="report-downloads"><button className="primary-button print-button" onClick={() => { const title = document.title; document.title = `${documentTitle} - ${week}`; window.print(); document.title = title }}><Icon name="print" />Imprimir o guardar PDF</button><button className="secondary-button" onClick={downloadPng} disabled={exportingImage}><Icon name="download" />{exportingImage ? 'Preparando imagen…' : 'Descargar PNG'}</button></div>
           <p className="helper-text">El navegador abrirá el diálogo de impresión. Elegí “Guardar como PDF” para generar el archivo.</p>
         </section>
 
-        <NotebookReport store={db} week={week} mode={printMode} title={documentTitle} preview />
+        <NotebookReport store={db} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} preview />
       </div> : null}
     </motion.main></AnimatePresence></div>
 
@@ -471,12 +511,12 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
         <header><div><span className="section-kicker">REVISIÓN · {format(selected.day)}</span><h2 id="review-title">{client?.name ?? 'Nueva revisión'}</h2><p>Una revisión también cuenta si no hiciste cambios.</p></div><button className="icon-button" onClick={() => closeReview()} aria-label="Cerrar"><Icon name="close" /></button></header>
         <ClientPicker clients={active} value={selected.id} onChange={id => { if ((actions || observations || pendingText || actionEntries.length) && !window.confirm('¿Cambiar de cliente y descartar lo que estás escribiendo?')) return; openReview(id, selected.day) }} />
         <QuickActions value={actionEntries} onChange={setActionEntries} />
-        <label>Otros detalles<textarea rows={2} value={actions} onChange={event => setActions(event.target.value)} placeholder="Algo más que quieras registrar…" /></label>
-        <label>Observaciones<textarea rows={4} value={observations} onChange={event => setObservations(event.target.value)} placeholder="Qué detectaste y qué conviene seguir…" /></label>
+        <label htmlFor="review-actions">Otros detalles</label><textarea id="review-actions" aria-label="Otros detalles" rows={2} value={actions} onChange={event => setActions(event.target.value)} placeholder="Algo más que quieras registrar…" />
+        <label htmlFor="review-observations">Observaciones</label><textarea id="review-observations" aria-label="Observaciones" rows={4} value={observations} onChange={event => setObservations(event.target.value)} placeholder="Qué detectaste y qué conviene seguir…" />
         <div className="pending-entry"><label htmlFor="pending-note">Nuevo pendiente</label><div><input id="pending-note" value={pendingText} onChange={event => setPendingText(event.target.value)} placeholder="Ej.: revisar CPA el jueves" /><button className="secondary-button" onClick={addPending} disabled={!client || !pendingText.trim()}><Icon name="plus" />Agregar</button></div></div>
         <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : <span />}<div><button className="secondary-button" onClick={() => closeReview()}>Cancelar</button><button className="primary-button" disabled={!client || closingReview} onClick={saveReview}><Icon name="check" />Guardar revisión</button></div></footer>
     </dialog> : null}
 
-    <NotebookReport store={db} week={week} mode={printMode} title={documentTitle} />
+    <NotebookReport store={db} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} />
   </div></MotionConfig>
 }

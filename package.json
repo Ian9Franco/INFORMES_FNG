@@ -7,10 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.mjs"
+    "test": "node --experimental-transform-types --test tests/*.test.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.0",
+    "@supabase/supabase-js": "2.117.3",
     "html-to-image": "^1.11.13",
     "lucide-react": "^1.57.0",
     "motion": "^14.2.0",
@@ -19,6 +19,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

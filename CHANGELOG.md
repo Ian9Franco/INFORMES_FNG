@@ -5,6 +5,12 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — documentación y estabilización del PR #1
 
 ### Interfaz operativa
+- Persistencia por registros en `fng_records`, con versiones, RLS, vínculos externos únicos y validación en base de datos.
+- Sincronización Realtime por usuario, recuperación al volver a primer plano y cola durable con reintentos y resolución explícita de conflictos.
+- Históricos mensuales con consultas acotadas por fecha y exportaciones A4 normal/detallada.
+- Importación inicial del snapshot previo y unión aditiva de registros locales desde otro dispositivo.
+- Companion con login autenticado, ingesta deduplicada de sesiones y bandeja de evidencia; observar actividad no confirma una revisión.
+- Receptor Service Worker para la futura fase Web Push; todavía no hay suscripción, VAPID ni scheduler de avisos.
 - Transición lateral con entrada/salida solapadas, recorrido corto y sin rotación ni pausa entre secciones.
 - Contadores de informes centrados con una altura común para sus etiquetas.
 - Footer con copyright de Ian Pontorno, enlace al portfolio y repositorio GitHub.

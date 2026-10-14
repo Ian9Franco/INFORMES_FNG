@@ -1,5 +1,7 @@
 # Histórico, uso del Free tier y sincronización PC / móvil
 
+**Documento de diagnóstico previo.** La primera fase ya está implementada: ver [SINCRONIZACION_V1.md](SINCRONIZACION_V1.md). El esquema y los límites descritos como «actuales» abajo corresponden a la versión anterior basada en snapshots.
+
 ## Qué guarda hoy la app
 
 `WorkspaceGate.tsx` lee `public.workspaces.data` para el usuario autenticado y vuelve a escribir el snapshot completo cuando cambia el estado de App. La tabla tiene `user_id` como clave primaria, `data` JSONB y `updated_at`. RLS limita el acceso a la fila propia.

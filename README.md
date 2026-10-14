@@ -20,7 +20,7 @@ Aplicación de seguimiento **personal** de trabajo en Meta Ads para Fanger Desig
 | Aplicación web | Next.js 15, App Router, React 19, TypeScript |
 | Estilos | CSS propio en `src/styles.css`, incluido `@media print` |
 | Autenticación | Supabase Auth: correo y enlace de acceso (OTP/magic link) |
-| Persistencia remota | Supabase PostgreSQL, tabla `public.workspaces` (JSONB por usuario) |
+| Persistencia remota | Supabase PostgreSQL, `fng_records` por entidad y `fng_ad_accounts`; Auth + RLS + Realtime |
 | Autorización | Row Level Security (RLS) por `auth.uid()` |
 | Persistencia adicional | `localStorage` y respaldo JSON importable/exportable |
 | PWA | Manifest e íconos; **sin service worker**, offline ni push |
@@ -65,7 +65,7 @@ En **Supabase Dashboard → Authentication → URL Configuration**, configurar e
 | `npm start` | Sirve la compilación de producción |
 | `npm run lint` | **Solo** ejecuta `tsc --noEmit`. No ejecuta ESLint |
 
-No existen aún comandos ni suites de test unitarios/e2e. No hay lockfile de dependencias confirmado en la rama; CI instala con `npm install`.
+`npm test` verifica contratos, sincronización y migraciones en PostgreSQL aislado. Los scripts `verify-notebook.mjs` y `verify-cloud.mjs` comprueban la UI y dos navegadores con backend simulado. El lockfile está versionado.
 
 ## Base de datos y seguridad
 
@@ -78,7 +78,7 @@ public.workspaces
   updated_at timestamptz NOT NULL, default now()
 ```
 
-RLS está habilitado; los permisos `SELECT`, `INSERT`, `UPDATE` y `DELETE` se limitan a filas donde el `user_id` corresponde al usuario autenticado. No hay tablas normalizadas para clientes, revisiones ni tareas: todo el estado se guarda dentro de `data`.
+`workspaces` se conserva como respaldo previo. La persistencia activa usa `fng_records` (una fila por entidad, versión y fecha indexada) y `fng_ad_accounts` (vínculos únicos). Todas las tablas expuestas aplican RLS por `user_id`. Las nuevas migraciones están aplicadas y versionadas. Ver [sincronización v1](docs/SINCRONIZACION_V1.md) para el modelo, ingesta Companion, pruebas y preparación para notificaciones.
 
 No aplicar de nuevo manualmente la migración a una base existente sin comprobar las políticas: las sentencias `CREATE POLICY` no usan `IF NOT EXISTS`.
 
@@ -133,13 +133,13 @@ docs/                    # estado, backlog y roadmap
 
 La impresión usa HTML y CSS con `@media print` y `@page { size: A4 portrait }`. No genera PDF del lado del servidor ni envía correos. Las opciones de papel, escala y márgenes finales dependen del navegador/impresora; se requiere validación visual con la planilla original.
 
-Next expone `/manifest.webmanifest` e íconos. **Esto no implementa funcionamiento sin conexión**: no existe service worker, caché offline controlada, cola de sincronización ni notificaciones push.
+Next expone `/manifest.webmanifest` e íconos. La nube conserva caché del período visible y una cola de cambios pendientes por usuario. El Service Worker contiene el receptor de notificaciones, pero aún no se implementó suscripción/envío Web Push ni un motor de recordatorios.
 
 ## Limitaciones y riesgos
 
 - MVP en PR de borrador; sin despliegue productivo verificado.
-- Sin pruebas automáticas, sin lockfile, sin control de concurrencia entre dispositivos.
-- Sin historial de auditoría ni cambios por entrada; se sobrescribe el JSON completo.
+- Pruebas de navegador realizadas con Auth/REST/Realtime simulados; el login real y los dispositivos físicos requieren validación de producción por el usuario.
+- Sin historial inmutable de auditoría; hay registros/versiones y conflictos, pero no se conserva cada versión anterior de una nota.
 - Validación de respaldo y gestión de errores de sincronización insuficientes para uso crítico.
 - Sin fichas con historial filtrable por cliente ni vencimientos en pendientes.
 - No hay API de Meta Ads ni información de métricas automática.

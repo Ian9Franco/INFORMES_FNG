@@ -4,11 +4,12 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { date, format, type Store, weekDays } from '../data'
 import { describeReviewActions } from '../review-actions'
 import { sortClients } from '../clients'
+import { monthBounds } from '../sync/records'
 
 const weekdays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
 
 /** Identical physical sheet for preview and printing; all content fits without clipping. */
-export default function NotebookReport({ store, week, mode, title, preview = false }: { store: Store; week: string; mode: 'grilla' | 'detalle'; title: string; preview?: boolean }) {
+export default function NotebookReport({ store, week, month, mode, title, preview = false }: { store: Store; week: string; month?: string; mode: 'grilla' | 'detalle'; title: string; preview?: boolean }) {
   const sheet = useRef<HTMLDivElement>(null)
   const area = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
@@ -18,9 +19,10 @@ export default function NotebookReport({ store, week, mode, title, preview = fal
   const days = weekDays(week)
   const clients = sortClients(store.clients)
   const active = clients.filter(client => client.active)
-  const entries = store.reviews.filter(review => days.includes(review.date))
+  const bounds = month ? monthBounds(month) : undefined
+  const entries = store.reviews.filter(review => bounds ? review.date >= bounds.start && review.date < bounds.end : days.includes(review.date))
   const pending = store.pending.filter(item => !item.resolved)
-  const weekLabel = `${format(days[0])} al ${format(days[5])} de ${date(days[5]).getFullYear()}`
+  const weekLabel = month ? new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(date(`${month}-01`)) : `${format(days[0])} al ${format(days[5])} de ${date(days[5]).getFullYear()}`
 
   useLayoutEffect(() => {
     const resize = () => {
@@ -46,12 +48,12 @@ export default function NotebookReport({ store, week, mode, title, preview = fal
     if (frame.current) observer.observe(frame.current)
     window.addEventListener('beforeprint', resize)
     return () => { observer.disconnect(); window.removeEventListener('beforeprint', resize) }
-  }, [store, week, mode, title, preview])
+  }, [store, week, month, mode, title, preview])
 
   const paper = <div ref={sheet} className={`notebook-report ${mode === 'detalle' ? 'report-detail' : 'report-grid'}`}>
-    <header><div><span className="report-overline">LIBRETA DE SEGUIMIENTO</span><h1>{title}</h1><p>Publicidad · registro semanal</p></div><div><small>SEMANA</small><strong>{weekLabel}</strong></div></header>
+    <header><div><span className="report-overline">LIBRETA DE SEGUIMIENTO</span><h1>{title}</h1><p>Publicidad · registro {month ? 'mensual' : 'semanal'}</p></div><div><small>{month ? 'MES' : 'SEMANA'}</small><strong>{weekLabel}</strong></div></header>
     <div className="report-body" ref={area}><div className="report-content" ref={content}>
-      {mode === 'grilla' ? <table><thead><tr><th>CLIENTE</th>{days.map((day, index) => <th key={day}>{weekdays[index]}<small>{format(day)}</small></th>)}</tr></thead><tbody>{active.map(client => <tr key={client.id}><td>{client.name}</td>{days.map(day => <td key={day}>{store.reviews.some(review => review.clientId === client.id && review.date === day) ? '✓' : '·'}</td>)}</tr>)}</tbody></table> : <>
+      {mode === 'grilla' ? month ? <table><thead><tr><th>CLIENTE</th><th>REVISIONES</th><th>ACCIONES</th><th>ÚLTIMA REVISIÓN</th></tr></thead><tbody>{clients.filter(client => client.active || entries.some(review => review.clientId === client.id)).map(client => { const reviews = entries.filter(review => review.clientId === client.id).sort((a,b) => a.date.localeCompare(b.date)); return <tr key={client.id}><td>{client.name}</td><td>{reviews.length}</td><td>{reviews.reduce((sum, review) => sum + (review.actionEntries ?? []).reduce((total, action) => total + action.quantity, 0), 0)}</td><td>{reviews.length ? format(reviews[reviews.length - 1].date) : '—'}</td></tr> })}</tbody></table> : <table><thead><tr><th>CLIENTE</th>{days.map((day, index) => <th key={day}>{weekdays[index]}<small>{format(day)}</small></th>)}</tr></thead><tbody>{active.map(client => <tr key={client.id}><td>{client.name}</td>{days.map(day => <td key={day}>{store.reviews.some(review => review.clientId === client.id && review.date === day) ? '✓' : '·'}</td>)}</tr>)}</tbody></table> : <>
         <p className="report-intro">{entries.length} revisiones realizadas · {new Set(entries.map(review => review.clientId)).size} clientes</p>
         {clients.map(client => {
           const reviews = entries.filter(review => review.clientId === client.id).sort((a, b) => a.date.localeCompare(b.date))

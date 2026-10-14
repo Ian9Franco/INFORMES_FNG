@@ -1,6 +1,6 @@
 # Contrato FNG ↔ FNG Companion (propuesta)
 
-**Estado:** especificación para desarrollo posterior. La app Next.js no consume sesiones de Chrome actualmente; no se han desplegado endpoints/tablas de este documento. Companion hoy mantiene eventos locales y no comparte el login de la PWA.
+**Estado:** la ingesta inicial autenticada y la bandeja compartida están implementadas en [SINCRONIZACION_V1.md](SINCRONIZACION_V1.md). La programación por cuenta/plataforma y el motor de recordatorios descritos abajo siguen siendo propuesta. Companion inicia su propia sesión del mismo usuario; no copia credenciales de la PWA.
 
 **Repos:**
 - Central: [INFORMES_FNG](https://github.com/Ian9Franco/INFORMES_FNG) (Next.js + Supabase)
