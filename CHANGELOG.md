@@ -5,6 +5,17 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — documentación y estabilización del PR #1
 
 ### Interfaz operativa
+- Navegación superior flotante en escritorio y dock móvil, sin sidebar; selección animada mediante Motion.
+- Animated Tags de SmoothUI e iconos de Animate UI adaptados con licencias conservadas.
+- 19 acciones rápidas Meta/Google con IDs estables, UUID por registro, cantidades y origen/evidencia versionados.
+- Acciones estructuradas incluidas en respaldo, vista previa e impresión; compatibilidad con revisiones anteriores.
+- Contrato futuro Companion documentado en `docs/ACCIONES_RAPIDAS.md`; propuestas observadas no se confunden con acciones confirmadas.
+- Pulido móvil/iOS: materiales glass discretos, navegación flotante con safe areas y resumen diario compacto.
+- Skeletons en carga e hidratación; tipografía de sistema para evitar saltos por fuentes remotas.
+- Transiciones de navegación, apertura/cierre de revisiones y avisos; respeta la preferencia de movimiento reducido.
+- Búsqueda en jornada, selector de cliente al registrar y protección de cambios sin guardar.
+- Diálogo nativo con foco contenido, scroll de fondo bloqueado y ajuste al teclado mediante Visual Viewport.
+- Tabla semanal con columna de cliente fija y controles táctiles de al menos 44 px.
 - Rediseño responsive de jornada, semana, clientes e informes con navegación accesible.
 - Gestión de clientes con búsqueda, filtros, alta, archivo, reactivación y borrado seguro solo cuando no existe historial.
 - Formulario completo de revisión con acciones, observaciones y pendientes; estados y confirmaciones visibles.

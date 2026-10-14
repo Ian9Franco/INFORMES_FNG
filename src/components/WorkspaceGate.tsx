@@ -5,6 +5,7 @@ import type { User } from '@supabase/supabase-js'
 import App from '../App'
 import { type Store, initial, load } from '../data'
 import { supabase } from '../lib/supabase'
+import WorkspaceSkeleton from './WorkspaceSkeleton'
 
 export default function WorkspaceGate() {
   const client = supabase
@@ -14,6 +15,8 @@ export default function WorkspaceGate() {
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
   const queue = useRef(Promise.resolve())
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => setHydrated(true), [])
 
   useEffect(() => {
     if (!client) return
@@ -104,8 +107,8 @@ export default function WorkspaceGate() {
     setMessage(error ? error.message : 'Revisá tu correo para ingresar mediante el enlace de acceso.')
   }
 
+  if (!hydrated || busy) return <WorkspaceSkeleton />
   if (!client) return <App storageMode="local" />
-  if (busy) return <div className="auth-shell"><p>Cargando tu espacio de trabajo…</p></div>
   if (!user) return <main className="auth-shell"><form className="auth-card" onSubmit={signIn}><h1>Informes FNG</h1><p>Iniciá sesión para sincronizar tus revisiones y trabajar desde más de un dispositivo.</p><label>Correo electrónico<input type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="tu@email.com" /></label><button type="submit">Enviar enlace de acceso</button>{message ? <p role="status">{message}</p> : null}</form></main>
   if (!stored) return <main className="auth-shell"><div className="auth-card"><h1>No pudimos abrir tu espacio</h1><p role="alert">{message || 'Intentá cerrar la sesión e ingresar nuevamente.'}</p><button onClick={() => client.auth.signOut()}>Cerrar sesión</button></div></main>
   return <><div className="session-bar screen"><span>Conectado como {user.email}</span><button onClick={() => client.auth.signOut()}>Cerrar sesión</button>{message ? <span role="alert">{message}</span> : null}</div><App initialData={stored} onChange={onChange} storageMode="cloud" /></>

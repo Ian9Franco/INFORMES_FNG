@@ -1,5 +1,6 @@
 export type Client = { id: string; name: string; active: boolean }
-export type Review = { id: string; clientId: string; date: string; createdAt: string; actions: string; observations: string }
+import type { ReviewAction } from './review-actions'
+export type Review = { id: string; clientId: string; date: string; createdAt: string; actions: string; observations: string; actionSchemaVersion?: 1; actionEntries?: ReviewAction[] }
 export type Pending = { id: string; clientId: string; text: string; resolved: boolean }
 export type Store = { clients: Client[]; reviews: Review[]; pending: Pending[]; closed: string[] }
 export const names = ['VALINOR','SORRENTO','REGINA','ALAZAN','LOBO CAFÉ','CASA VELTRI','MAMBA','HOUSTON ARG','HOUSTON USA','NATIVO','TOLENTINOS','AZAHARES','ELECTRIC HOGAR','GENERIA','IMEK','ZOFFA','JOKER','JONDE','NET','DORMILINDO','PERRI','CARROCERÍAS CULPINA','CULPINA EXPEDITION','OLIVIERI','ALLEGRA','DA MILÁN','CORUÉS']

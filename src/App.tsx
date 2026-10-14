@@ -1,6 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { LayoutGroup, MotionConfig, motion, useReducedMotion } from 'motion/react'
+import QuickActions from './components/QuickActions'
+import { AnimatedChart } from './components/AnimatedSymbols'
+import { ACTION_SCHEMA_VERSION, describeReviewActions, validReviewActions, type ReviewAction } from './review-actions'
 import {
   type Client,
   type Review,
@@ -72,6 +77,8 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
   const [week, setWeek] = useState(() => monday(new Date()))
   const [selected, setSelected] = useState<{ id: string; day: string } | null>(null)
   const [actions, setActions] = useState('')
+  const [actionEntries, setActionEntries] = useState<ReviewAction[]>([])
+  const calm = useReducedMotion()
   const [observations, setObservations] = useState('')
   const [pendingText, setPendingText] = useState('')
   const [newName, setNewName] = useState('')
@@ -80,6 +87,12 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
   const [printMode, setPrintMode] = useState<PrintMode>('grilla')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [dailySearch, setDailySearch] = useState('')
+  const [closingReview, setClosingReview] = useState(false)
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scrollPositions = useRef<Partial<Record<Tab, number>>>({})
+  const selectedOpen = selected !== null
 
   const today = keyDate(new Date())
   const days = weekDays(week)
@@ -93,6 +106,57 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
   const client = selected ? db.clients.find(clientItem => clientItem.id === selected.id) : undefined
   const weekLabel = `${format(days[0])} al ${format(days[5])} de ${date(days[5]).getFullYear()}`
   const longToday = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
+  const dailyClients = active.filter(item => item.name.toLocaleLowerCase('es').includes(dailySearch.trim().toLocaleLowerCase('es')))
+
+  function navigate(next: Tab) {
+    if (next === tab) return
+    scrollPositions.current[tab] = window.scrollY
+    const update = () => {
+      flushSync(() => setTab(next))
+      window.scrollTo({ top: scrollPositions.current[next] ?? 0, behavior: 'instant' })
+    }
+    update()
+  }
+
+  function closeReview(force = false) {
+    if (closingReview) return
+    const dirty = actions !== (current?.actions ?? '') || observations !== (current?.observations ?? '') || pendingText.trim() !== '' || JSON.stringify(actionEntries) !== JSON.stringify(current?.actionEntries ?? [])
+    if (!force && dirty && !window.confirm('Tenés cambios sin guardar. ¿Cerrar la revisión y descartarlos?')) return
+    setClosingReview(true)
+    closeTimer.current = setTimeout(() => {
+      setSelected(null)
+      setClosingReview(false)
+    }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180)
+  }
+
+  useEffect(() => {
+    if (!selectedOpen) return
+    const dialog = dialogRef.current
+    const scrollY = window.scrollY
+    const previousStyle = document.body.style.cssText
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.width = '100%'
+    dialog?.showModal()
+    const viewport = window.visualViewport
+    const syncViewport = () => {
+      if (!dialog || !viewport || viewport.scale !== 1) return
+      dialog.style.setProperty('--visible-height', `${viewport.height}px`)
+      dialog.style.setProperty('--keyboard-inset', `${Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)}px`)
+    }
+    syncViewport()
+    viewport?.addEventListener('resize', syncViewport)
+    viewport?.addEventListener('scroll', syncViewport)
+    return () => {
+      viewport?.removeEventListener('resize', syncViewport)
+      viewport?.removeEventListener('scroll', syncViewport)
+      dialog?.close()
+      document.body.style.cssText = previousStyle
+      window.scrollTo({ top: scrollY, behavior: 'instant' })
+    }
+  }, [selectedOpen])
+
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current) }, [])
 
   const filteredClients = useMemo(() => {
     const query = clientSearch.trim().toLocaleLowerCase('es')
@@ -123,15 +187,20 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
   }
 
   function openReview(clientId: string, day: string) {
+    if (db.closed.includes(monday(date(day)))) {
+      setNotice('Semana cerrada. Reabrila desde Semana para editar.')
+      return
+    }
     const reviewItem = findReview(clientId, day)
     setSelected({ id: clientId, day })
     setActions(reviewItem?.actions ?? '')
+    setActionEntries(validReviewActions(reviewItem?.actionEntries) ? reviewItem.actionEntries : [])
     setObservations(reviewItem?.observations ?? '')
     setPendingText('')
   }
 
   function saveReview() {
-    if (!selected || db.closed.includes(monday(date(selected.day)))) return
+    if (!selected?.id || closingReview || db.closed.includes(monday(date(selected.day))) || !validReviewActions(actionEntries)) return
     const previous = findReview(selected.id, selected.day)
     const item: Review = {
       id: previous?.id ?? uid(),
@@ -139,13 +208,15 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
       date: selected.day,
       createdAt: previous?.createdAt ?? new Date().toISOString(),
       actions: actions.trim(),
+      actionSchemaVersion: ACTION_SCHEMA_VERSION,
+      actionEntries,
       observations: observations.trim(),
     }
     setDb(currentDb => ({
       ...currentDb,
       reviews: [...currentDb.reviews.filter(reviewItem => reviewItem.clientId !== selected.id || reviewItem.date !== selected.day), item],
     }))
-    setSelected(null)
+    closeReview(true)
     setNotice(previous ? 'Revisión actualizada' : 'Revisión registrada')
   }
 
@@ -153,12 +224,12 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
     if (!current) return
     if (!window.confirm('¿Quitar esta revisión? Las observaciones asociadas también se eliminarán.')) return
     setDb(currentDb => ({ ...currentDb, reviews: currentDb.reviews.filter(reviewItem => reviewItem.id !== current.id) }))
-    setSelected(null)
+    closeReview(true)
     setNotice('Revisión eliminada')
   }
 
   function addPending() {
-    if (!selected || !pendingText.trim()) return
+    if (!selected?.id || !pendingText.trim()) return
     setDb(currentDb => ({
       ...currentDb,
       pending: [...currentDb.pending, { id: uid(), clientId: selected.id, text: pendingText.trim(), resolved: false }],
@@ -228,6 +299,7 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
     file.text().then(content => {
       const value: unknown = JSON.parse(content)
       if (!value || typeof value !== 'object' || !('clients' in value) || !('reviews' in value) || !('pending' in value) || !('closed' in value) || !Array.isArray(value.clients) || !Array.isArray(value.reviews) || !Array.isArray(value.pending) || !Array.isArray(value.closed)) throw Error('Formato inválido')
+      if (value.reviews.some(item => !item || typeof item !== 'object' || ('actionEntries' in item && (!validReviewActions(item.actionEntries) || item.actionSchemaVersion !== ACTION_SCHEMA_VERSION)))) throw Error('Acciones inválidas')
       if (window.confirm('¿Reemplazar todos los datos por este respaldo?')) {
         setDb(value as Store)
         setNotice('Respaldo restaurado')
@@ -254,20 +326,19 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
 
   const title = pageTitles[tab]
 
-  return <div className="app-shell">
-    <aside className="sidebar screen">
-      <div className="brand"><span className="brand-mark">F</span><div><strong>INFORMES FNG</strong><small>CONTROL DE CUENTAS</small></div></div>
-      <nav aria-label="Navegación principal">
-        {navItems.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => setTab(item.id)}><Icon name={item.icon} /><span>{item.label}</span>{item.id === 'jornada' && pending.length > 0 ? <b>{pending.length}</b> : null}</button>)}
-      </nav>
-      <div className="sidebar-status"><span className={`status-dot ${storageMode}`} /><div><strong>{storageMode === 'cloud' ? 'Sincronización activa' : 'Modo local'}</strong><small>{storageMode === 'cloud' ? 'Guardado automático' : 'Datos en este navegador'}</small></div></div>
-      <div className="sidebar-footer"><span>FNG</span><small>Panel de seguimiento</small></div>
-    </aside>
+  return <MotionConfig reducedMotion="user"><div className="app-shell">
+    <header className="app-navigation screen">
+      <div className="wordmark"><span className="wordmark-symbol">f.</span><strong>informes<span>fng</span></strong></div>
+      <LayoutGroup id="workspace-navigation"><nav aria-label="Navegación principal">
+        {navItems.map(item => <motion.button whileTap={calm ? undefined : { scale: .97 }} key={item.id} aria-current={tab === item.id ? 'page' : undefined} className={tab === item.id ? 'active' : ''} onClick={() => navigate(item.id)}>{tab === item.id ? <motion.span className="navigation-highlight" layoutId="active-navigation" transition={calm ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 36 }} /> : null}<span className="navigation-icon">{item.id === 'jornada' ? <AnimatedChart active={tab === item.id} /> : <Icon name={item.icon} />}</span><span className="navigation-label">{item.label}</span>{item.id === 'jornada' && pending.length > 0 ? <b>{pending.length}</b> : null}</motion.button>)}
+      </nav></LayoutGroup>
+      <span className="storage-indicator"><i />{storageMode === 'cloud' ? 'Conectado' : 'En este dispositivo'}</span>
+    </header>
 
-    <main className="workspace screen">
+    <motion.main className="workspace screen" key={tab} initial={calm ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: calm ? 0 : .24, ease: [0.22, 1, 0.36, 1] }}>
       <header className="page-header">
         <div><span className="eyebrow">{title.eyebrow}</span><h1>{title.title}</h1><p>{title.description}</p></div>
-        <div className="header-actions"><span className="date-chip">{longToday}</span><button className="primary-button" onClick={() => setTab('jornada')} disabled={active.length === 0}><Icon name="plus" />Registrar revisión</button></div>
+        <div className="header-actions"><span className="date-chip">{longToday}</span><button className="primary-button" onClick={() => openReview('', today)} disabled={active.length === 0}><Icon name="plus" />Registrar revisión</button></div>
       </header>
 
       {error ? <div role="alert" className="alert"><span>{error}</span><button onClick={() => setError('')} aria-label="Cerrar aviso"><Icon name="close" /></button></div> : null}
@@ -287,16 +358,17 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
 
         <div className="dashboard-grid">
           <section className="panel daily-list">
-            <div className="panel-heading"><div><span className="section-kicker">CUENTAS ACTIVAS</span><h2>Revisiones de hoy</h2></div><button className="text-button" onClick={() => setTab('semana')}>Ver semana <Icon name="chevron-right" /></button></div>
-            {active.length ? <div className="review-list">{active.map(clientItem => {
+            <div className="panel-heading"><div><span className="section-kicker">CUENTAS ACTIVAS</span><h2>Revisiones de hoy</h2></div><button className="text-button" onClick={() => navigate('semana')}>Ver semana <Icon name="chevron-right" /></button></div>
+            <div className="search-box daily-search"><Icon name="search" /><input type="search" value={dailySearch} onChange={event => setDailySearch(event.target.value)} placeholder="Buscar en tus clientes" aria-label="Buscar en la jornada" /></div>
+            {dailyClients.length ? <div className="review-list">{dailyClients.map(clientItem => {
               const reviewItem = findReview(clientItem.id, today)
               return <button key={clientItem.id} className="review-row" onClick={() => openReview(clientItem.id, today)}>
                 <span className={`review-state ${reviewItem ? 'done' : ''}`}>{reviewItem ? <Icon name="check" /> : <span />}</span>
-                <span className="review-name"><strong>{clientItem.name}</strong><small>{reviewItem ? (reviewItem.actions || reviewItem.observations || 'Revisión registrada') : 'Todavía sin revisar'}</small></span>
+                <span className="review-name"><strong>{clientItem.name}</strong><small>{reviewItem ? (describeReviewActions(reviewItem) || reviewItem.observations || 'Revisión registrada') : 'Todavía sin revisar'}</small></span>
                 <span className={`state-pill ${reviewItem ? 'done' : ''}`}>{reviewItem ? 'Revisado' : 'Pendiente'}</span>
                 <Icon name="chevron-right" />
               </button>
-            })}</div> : <EmptyState icon="users" title="Todavía no hay clientes" text="Agregá tu primer cliente para comenzar el seguimiento." />}
+            })}</div> : <EmptyState icon="users" title={active.length ? 'Sin coincidencias' : 'Todavía no hay clientes'} text={active.length ? 'Probá con otro nombre.' : 'Agregá tu primer cliente para comenzar el seguimiento.'} />}
           </section>
 
           <section className="panel tasks-panel">
@@ -316,7 +388,7 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
           return <td key={day}><button disabled={closed} className={reviewItem ? 'reviewed' : ''} onClick={() => openReview(clientItem.id, day)} aria-label={`Revisión de ${clientItem.name} para ${day}`}>{reviewItem ? <Icon name="check" /> : <Icon name="plus" size={15} />}</button></td>
         })}</tr>)}</tbody></table></div>
         {!active.length ? <EmptyState icon="users" title="No hay clientes activos" text="Reactivá o agregá un cliente para completar la semana." /> : null}
-        <div className="panel-footer"><p><span className="legend-dot reviewed" />Revisado <span className="legend-dot" />Sin revisar</p><div><button className="secondary-button" onClick={toggleWeekClosed}><Icon name={closed ? 'unlock' : 'lock'} />{closed ? 'Reabrir semana' : 'Cerrar semana'}</button><button className="primary-button" onClick={() => { setPrintMode('grilla'); setTab('informes') }}><Icon name="print" />Preparar informe</button></div></div>
+        <div className="panel-footer"><p><span className="legend-dot reviewed" />Revisado <span className="legend-dot" />Sin revisar</p><div><button className="secondary-button" onClick={toggleWeekClosed}><Icon name={closed ? 'unlock' : 'lock'} />{closed ? 'Reabrir semana' : 'Cerrar semana'}</button><button className="primary-button" onClick={() => { setPrintMode('grilla'); navigate('informes') }}><Icon name="print" />Preparar informe</button></div></div>
       </section> : null}
 
       {tab === 'clientes' ? <>
@@ -355,30 +427,30 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
           <header><div className="report-brand"><span>F</span><div><strong>INFORMES FNG</strong><small>SEGUIMIENTO PUBLICITARIO</small></div></div><div><small>SEMANA</small><strong>{weekLabel}</strong></div></header>
           {printMode === 'grilla' ? <table><thead><tr><th>CLIENTE</th>{days.map((day, index) => <th key={day}>{weekdays[index]}<small>{format(day)}</small></th>)}</tr></thead><tbody>{active.map(clientItem => <tr key={clientItem.id}><td>{clientItem.name}</td>{days.map(day => <td key={day}>{findReview(clientItem.id, day) ? <Icon name="check" size={13} /> : null}</td>)}</tr>)}</tbody></table> : <div className="detail-preview"><p className="report-lead">{inWeek.length} revisiones realizadas durante el período.</p>{db.clients.map(clientItem => {
             const entries = inWeek.filter(item => item.clientId === clientItem.id).sort((a, b) => a.date.localeCompare(b.date))
-            return entries.length ? <section key={clientItem.id}><h3>{clientItem.name}</h3>{entries.map(item => <article key={item.id}><b>{format(item.date)}</b><p><strong>Acciones:</strong> {item.actions || 'Sin modificaciones registradas.'}</p><p><strong>Observaciones:</strong> {item.observations || 'Sin observaciones registradas.'}</p></article>)}</section> : null
+            return entries.length ? <section key={clientItem.id}><h3>{clientItem.name}</h3>{entries.map(item => <article key={item.id}><b>{format(item.date)}</b><p><strong>Acciones:</strong> {describeReviewActions(item) || 'Sin modificaciones registradas.'}</p><p><strong>Observaciones:</strong> {item.observations || 'Sin observaciones registradas.'}</p></article>)}</section> : null
           })}{!inWeek.length ? <EmptyState icon="report" title="Sin revisiones" text="Todavía no hay actividad registrada para esta semana." /> : null}<section><h3>Pendientes abiertos</h3>{pending.length ? pending.map(item => <p key={item.id}><strong>{db.clients.find(clientItem => clientItem.id === item.clientId)?.name}:</strong> {item.text}</p>) : <p>Sin pendientes abiertos.</p>}</section></div>}
           <footer><span>Documento de seguimiento interno</span><span>Generado el {new Date().toLocaleDateString('es-AR')}</span></footer>
         </div></section>
       </div> : null}
-    </main>
+    </motion.main>
 
-    {selected && client ? <div className="modal-backdrop screen" onMouseDown={event => { if (event.target === event.currentTarget) setSelected(null) }}>
-      <section className="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-title">
-        <header><div><span className="section-kicker">REVISIÓN · {format(selected.day)}</span><h2 id="review-title">{client.name}</h2><p>Registrá la revisión aunque no hayas realizado modificaciones.</p></div><button className="icon-button" onClick={() => setSelected(null)} aria-label="Cerrar"><Icon name="close" /></button></header>
-        <label>Acciones realizadas<textarea rows={4} value={actions} onChange={event => setActions(event.target.value)} placeholder="Cambios de campañas, presupuestos, anuncios…" /></label>
+    {selected ? <dialog ref={dialogRef} className={`review-modal screen ${closingReview ? 'is-closing' : ''}`} aria-labelledby="review-title" onCancel={event => { event.preventDefault(); closeReview() }} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeReview() } }}>
+        <header><div><span className="section-kicker">REVISIÓN · {format(selected.day)}</span><h2 id="review-title">{client?.name ?? 'Nueva revisión'}</h2><p>Una revisión también cuenta si no hiciste cambios.</p></div><button className="icon-button" onClick={() => closeReview()} aria-label="Cerrar"><Icon name="close" /></button></header>
+        <label>Cliente<select value={selected.id} onChange={event => { if ((actions || observations || pendingText || actionEntries.length) && !window.confirm('¿Cambiar de cliente y descartar lo que estás escribiendo?')) return; openReview(event.target.value, selected.day) }}><option value="" disabled>Elegí un cliente</option>{active.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <QuickActions value={actionEntries} onChange={setActionEntries} />
+        <label>Otros detalles<textarea rows={2} value={actions} onChange={event => setActions(event.target.value)} placeholder="Algo más que quieras registrar…" /></label>
         <label>Observaciones<textarea rows={4} value={observations} onChange={event => setObservations(event.target.value)} placeholder="Qué detectaste y qué conviene seguir…" /></label>
-        <div className="pending-entry"><label htmlFor="pending-note">Nuevo pendiente</label><div><input id="pending-note" value={pendingText} onChange={event => setPendingText(event.target.value)} placeholder="Ej.: revisar CPA el jueves" /><button className="secondary-button" onClick={addPending} disabled={!pendingText.trim()}><Icon name="plus" />Agregar</button></div></div>
-        <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : <span />}<div><button className="secondary-button" onClick={() => setSelected(null)}>Cancelar</button><button className="primary-button" onClick={saveReview}><Icon name="check" />Guardar revisión</button></div></footer>
-      </section>
-    </div> : null}
+        <div className="pending-entry"><label htmlFor="pending-note">Nuevo pendiente</label><div><input id="pending-note" value={pendingText} onChange={event => setPendingText(event.target.value)} placeholder="Ej.: revisar CPA el jueves" /><button className="secondary-button" onClick={addPending} disabled={!client || !pendingText.trim()}><Icon name="plus" />Agregar</button></div></div>
+        <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : <span />}<div><button className="secondary-button" onClick={() => closeReview()}>Cancelar</button><button className="primary-button" disabled={!client || closingReview} onClick={saveReview}><Icon name="check" />Guardar revisión</button></div></footer>
+    </dialog> : null}
 
     <div className="print-paper">
       <header><div className="print-brand"><span>F</span><div><h1>INFORMES FNG</h1><p>Seguimiento publicitario semanal</p></div></div><div><small>SEMANA</small><strong>{weekLabel}</strong></div></header>
       {printMode === 'grilla' ? <table className="paper-grid"><thead><tr><th>CLIENTE</th>{days.map((day, index) => <th key={day}>{weekdays[index]}<small>{format(day)}</small></th>)}</tr></thead><tbody>{active.map(clientItem => <tr key={clientItem.id}><td>{clientItem.name}</td>{days.map(day => <td key={day}>{findReview(clientItem.id, day) ? '✓' : ''}</td>)}</tr>)}</tbody></table> : <div className="paper-detail"><p>{inWeek.length} revisiones realizadas</p>{db.clients.map(clientItem => {
         const entries = inWeek.filter(item => item.clientId === clientItem.id).sort((a, b) => a.date.localeCompare(b.date))
-        return entries.length ? <section key={clientItem.id}><h2>{clientItem.name}</h2>{entries.map(item => <article key={item.id}><b>{format(item.date)}</b><p><strong>Acciones: </strong>{item.actions || 'Sin modificaciones registradas.'}</p><p><strong>Observaciones: </strong>{item.observations || 'Sin observaciones registradas.'}</p></article>)}</section> : null
+        return entries.length ? <section key={clientItem.id}><h2>{clientItem.name}</h2>{entries.map(item => <article key={item.id}><b>{format(item.date)}</b><p><strong>Acciones: </strong>{describeReviewActions(item) || 'Sin modificaciones registradas.'}</p><p><strong>Observaciones: </strong>{item.observations || 'Sin observaciones registradas.'}</p></article>)}</section> : null
       })}<h2>Pendientes abiertos</h2>{pending.length ? pending.map(item => <p key={item.id}><strong>{db.clients.find(clientItem => clientItem.id === item.clientId)?.name}:</strong> {item.text}</p>) : <p>Sin pendientes abiertos.</p>}</div>}
       <footer><span>Documento de seguimiento interno</span><span>Generado el {new Date().toLocaleDateString('es-AR')}</span></footer>
     </div>
-  </div>
+  </div></MotionConfig>
 }
