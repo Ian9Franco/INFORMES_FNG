@@ -33,7 +33,11 @@ La metadata de tareas resueltas/cierres todavía se carga completa. Para volúme
 
 ## Companion
 
-Actualizar la extensión desde el repositorio Companion: `npm install`, `npm run build`, recargar `dist` en Chrome. En su panel ingresar correo y contraseña de la misma cuenta. Si la web usa magic link, en **Clientes → Conectar Companion** se puede definir una contraseña (mínimo 12 caracteres).
+Actualizar la extensión desde el repositorio Companion: `npm install`, `npm run build`, recargar `dist` en Chrome. En su panel ingresar correo y contraseña de la misma cuenta. Si la web usa magic link, **Contraseña de mi cuenta** en la barra superior o **Clientes → Conectar Companion** permiten elegir y confirmar una contraseña (mínimo 12 caracteres). No se genera una contraseña automática ni se envía por correo.
+
+El login prioriza correo y contraseña, sin envío de emails. **Olvidé mi contraseña** solicita un enlace de recuperación y al validarlo abre el formulario de contraseña. El primer acceso por email y la recuperación sí consumen el cupo de correos; el formulario bloquea envíos duplicados y explica los errores 429 sin reintentos automáticos. No se desactiva la confirmación del correo ni se usa acceso administrativo para eludirla.
+
+Si no hay sesión válida ni contraseña previa, se necesita un enlace vigente sin usar o esperar el restablecimiento del límite. Para producción, configurar SMTP propio y ajustar los límites permitidos en Supabase; no intentar resolver el cupo cambiando IP o creando cuentas nuevas. Confirmar también **Site URL** y **Redirect URLs** con `https://informesfng.vercel.app/`.
 
 Sólo se sincroniza tras ese login explícito. Supabase guarda la sesión de la extensión en `chrome.storage.local`; no se copia el token de la PWA ni se usa service_role. Las sesiones se vinculan a un usuario para evitar reenviar el historial a otro login.
 
@@ -47,7 +51,8 @@ La bandeja **Actividad de tu PC** muestra esas sesiones. Su duración es aproxim
 
 ## Verificación y límites de evidencia
 
-- 16 pruebas automatizadas: contratos, IDs, cola, concurrencia y migraciones/RPC en PostgreSQL aislado (PGlite).
+- 19 pruebas automatizadas: contratos, IDs, cola, concurrencia, validación de contraseña/enlaces y migraciones/RPC en PostgreSQL aislado (PGlite).
+- `scripts/verify-auth.mjs`: navegador móvil con Auth simulado verifica ingreso sin correos, error de cupo y bloqueo de reenvíos, contraseña confirmada sin guardarla en localStorage y retorno de recuperación. No envía emails ni cambia cuentas reales.
 - Dos navegadores con Auth/REST/Realtime simulados: una revisión se refleja en móvil, no hay eco de escrituras, se conserva el borrador frente a edición remota y se reenvía al reconectar; histórico mensual filtrado.
 - Supabase real: migraciones aplicadas, RLS habilitado, publicación Realtime y permisos que impiden escrituras/ingesta anónimas comprobados; advisors de seguridad sin hallazgos.
 - Las pruebas iniciales de CAS/RLS en transacciones revertidas pasaron. La revisión automática rechazó posteriormente crear cuentas Auth para pruebas adicionales; no se crearon cuentas ni se verificó el login real de una identidad humana.
