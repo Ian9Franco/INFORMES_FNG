@@ -5,6 +5,16 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — documentación y estabilización del PR #1
 
 ### Interfaz operativa
+- Clientes siempre ordenados alfabéticamente en jornada, semana, gestión, selector y documentos.
+- Alta de clientes exige nombre e ID numérico de cuenta Meta; rechazo de nombres/cuentas duplicados, incluso en clientes archivados.
+- Identidad de libreta con papel cálido, tinta, reglas sutiles y cambio lateral de páginas.
+- Toggle claro/oscuro persistente, inicializado antes de mostrar la página para evitar destellos.
+- Selector de clientes personalizado con búsqueda por nombre/ID, navegación de teclado y detalle de cuenta.
+- 34 cuentas Meta vinculadas mediante migración aditiva y versionada; IDs almacenados como texto y copiables desde Clientes.
+- Título del documento editable (por defecto Informe Ian), manteniendo Informes FNG como marca de la aplicación.
+- Documento A4 compartido entre vista previa, PDF y PNG; tipografía más grande y ajuste completo a una sola hoja.
+- Descarga PNG de planilla semanal e informe detallado a aproximadamente 300 dpi.
+- Verificación real en Chrome aislado de tema, revisión, selector, título, responsive y exportaciones de ambos formatos.
 - Navegación superior flotante en escritorio y dock móvil, sin sidebar; selección animada mediante Motion.
 - Animated Tags de SmoothUI e iconos de Animate UI adaptados con licencias conservadas.
 - 19 acciones rápidas Meta/Google con IDs estables, UUID por registro, cantidades y origen/evidencia versionados.

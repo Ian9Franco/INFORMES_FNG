@@ -1,10 +1,12 @@
-export type Client = { id: string; name: string; active: boolean }
+import type { AdvertisingAccount } from './account-catalog'
+import { reconcileAccounts } from './account-catalog'
+export type Client = { id: string; name: string; active: boolean; advertisingAccounts?: AdvertisingAccount[] }
 import type { ReviewAction } from './review-actions'
 export type Review = { id: string; clientId: string; date: string; createdAt: string; actions: string; observations: string; actionSchemaVersion?: 1; actionEntries?: ReviewAction[] }
 export type Pending = { id: string; clientId: string; text: string; resolved: boolean }
-export type Store = { clients: Client[]; reviews: Review[]; pending: Pending[]; closed: string[] }
+export type Store = { clients: Client[]; reviews: Review[]; pending: Pending[]; closed: string[]; accountCatalogVersion?: number }
 export const names = ['VALINOR','SORRENTO','REGINA','ALAZAN','LOBO CAFÉ','CASA VELTRI','MAMBA','HOUSTON ARG','HOUSTON USA','NATIVO','TOLENTINOS','AZAHARES','ELECTRIC HOGAR','GENERIA','IMEK','ZOFFA','JOKER','JONDE','NET','DORMILINDO','PERRI','CARROCERÍAS CULPINA','CULPINA EXPEDITION','OLIVIERI','ALLEGRA','DA MILÁN','CORUÉS']
-export const initial = ():Store => ({ clients:names.map((name,i)=>({id:String(i+1),name,active:true})),reviews:[],pending:[],closed:[] })
+export const initial = ():Store => reconcileAccounts({ clients:names.map((name,i)=>({id:String(i+1),name,active:true})),reviews:[],pending:[],closed:[] })
 const key='informes-fng-v1'
 export function load():Store { try { const v=JSON.parse(localStorage.getItem(key)||'null'); return v && Array.isArray(v.clients) && Array.isArray(v.reviews) && Array.isArray(v.pending) && Array.isArray(v.closed) ? v as Store : initial() } catch { return initial() } }
 export function persist(v:Store) { localStorage.setItem(key,JSON.stringify(v)) }

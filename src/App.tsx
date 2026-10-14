@@ -1,8 +1,12 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
-import { LayoutGroup, MotionConfig, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from 'motion/react'
+import ThemeToggle from './components/ThemeToggle'
+import ClientPicker from './components/ClientPicker'
+import NotebookReport from './components/NotebookReport'
+import { reconcileAccounts } from './account-catalog'
+import { newClient, sortClients } from './clients'
 import QuickActions from './components/QuickActions'
 import { AnimatedChart } from './components/AnimatedSymbols'
 import { ACTION_SCHEMA_VERSION, describeReviewActions, validReviewActions, type ReviewAction } from './review-actions'
@@ -72,8 +76,10 @@ function EmptyState({ icon, title, text }: { icon: IconName; title: string; text
 }
 
 export default function App({ initialData, onChange, storageMode = 'local' }: { initialData?: Store; onChange?: (data: Store) => void; storageMode?: 'local' | 'cloud' }) {
-  const [db, setDb] = useState<Store>(() => initialData ?? load())
+  const [db, setDb] = useState<Store>(() => { const store = reconcileAccounts(initialData ?? load()); return { ...store, clients: sortClients(store.clients) } })
   const [tab, setTab] = useState<Tab>('jornada')
+  const [direction, setDirection] = useState(1)
+  const [turningPage, setTurningPage] = useState(false)
   const [week, setWeek] = useState(() => monday(new Date()))
   const [selected, setSelected] = useState<{ id: string; day: string } | null>(null)
   const [actions, setActions] = useState('')
@@ -82,9 +88,13 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
   const [observations, setObservations] = useState('')
   const [pendingText, setPendingText] = useState('')
   const [newName, setNewName] = useState('')
+  const [newAccountId, setNewAccountId] = useState('')
+  const [newClientError, setNewClientError] = useState('')
   const [clientSearch, setClientSearch] = useState('')
   const [clientFilter, setClientFilter] = useState<ClientFilter>('activos')
   const [printMode, setPrintMode] = useState<PrintMode>('grilla')
+  const [reportTitle, setReportTitle] = useState(() => { try { return localStorage.getItem('informe-fng-report-title') || 'Informe Ian' } catch { return 'Informe Ian' } })
+  const [exportingImage, setExportingImage] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [dailySearch, setDailySearch] = useState('')
@@ -93,10 +103,14 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scrollPositions = useRef<Partial<Record<Tab, number>>>({})
   const selectedOpen = selected !== null
+  const documentTitle = reportTitle.trim() || 'Informe Ian'
+
+  useEffect(() => { try { localStorage.setItem('informe-fng-report-title', reportTitle) } catch { /* Title remains usable without storage. */ } }, [reportTitle])
 
   const today = keyDate(new Date())
   const days = weekDays(week)
-  const active = db.clients.filter(clientItem => clientItem.active)
+  const clients = useMemo(() => sortClients(db.clients), [db.clients])
+  const active = clients.filter(clientItem => clientItem.active)
   const closed = db.closed.includes(week)
   const inWeek = db.reviews.filter(reviewItem => days.includes(reviewItem.date))
   const pending = db.pending.filter(item => !item.resolved)
@@ -109,13 +123,11 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
   const dailyClients = active.filter(item => item.name.toLocaleLowerCase('es').includes(dailySearch.trim().toLocaleLowerCase('es')))
 
   function navigate(next: Tab) {
-    if (next === tab) return
+    if (next === tab || turningPage) return
     scrollPositions.current[tab] = window.scrollY
-    const update = () => {
-      flushSync(() => setTab(next))
-      window.scrollTo({ top: scrollPositions.current[next] ?? 0, behavior: 'instant' })
-    }
-    update()
+    setDirection(navItems.findIndex(item => item.id === next) > navItems.findIndex(item => item.id === tab) ? 1 : -1)
+    setTurningPage(!calm)
+    setTab(next)
   }
 
   function closeReview(force = false) {
@@ -160,11 +172,12 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
 
   const filteredClients = useMemo(() => {
     const query = clientSearch.trim().toLocaleLowerCase('es')
-    return db.clients.filter(clientItem => {
+    return clients.filter(clientItem => {
       const matchesState = clientFilter === 'todos' || (clientFilter === 'activos' ? clientItem.active : !clientItem.active)
-      return matchesState && (!query || clientItem.name.toLocaleLowerCase('es').includes(query))
+      const searchable = `${clientItem.name} ${clientItem.advertisingAccounts?.map(account => `${account.owner} ${account.accountId}`).join(' ') ?? ''}`.toLocaleLowerCase('es')
+      return matchesState && (!query || searchable.includes(query))
     })
-  }, [clientFilter, clientSearch, db.clients])
+  }, [clientFilter, clientSearch, clients])
 
   useEffect(() => {
     try {
@@ -248,15 +261,16 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
 
   function addClient(event: React.FormEvent) {
     event.preventDefault()
-    const name = newName.trim().toLocaleUpperCase('es')
-    if (!name) return
-    if (db.clients.some(clientItem => clientItem.name === name)) {
-      setError('Ya existe un cliente con ese nombre.')
-      return
+    try {
+      const client = newClient(db.clients, newName, newAccountId)
+      setDb(currentDb => ({ ...currentDb, clients: sortClients([...currentDb.clients, client]) }))
+      setNewName('')
+      setNewAccountId('')
+      setNewClientError('')
+      setNotice('Cliente agregado con su cuenta publicitaria')
+    } catch (error) {
+      setNewClientError(error instanceof Error ? error.message : 'No se pudo agregar el cliente.')
     }
-    setDb(currentDb => ({ ...currentDb, clients: [...currentDb.clients, { id: uid(), name, active: true }] }))
-    setNewName('')
-    setNotice('Cliente agregado')
   }
 
   function toggleClient(clientItem: Client) {
@@ -295,13 +309,33 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
     setNotice('Respaldo descargado')
   }
 
+  async function downloadPng() {
+    if (exportingImage) return
+    const paper = document.querySelector<HTMLElement>('.print-paper .notebook-report')
+    if (!paper) return
+    setExportingImage(true)
+    try {
+      await document.fonts.ready
+      const { toPng } = await import('html-to-image')
+      const image = await toPng(paper, { pixelRatio: 3.125, backgroundColor: '#ffffff', skipFonts: true })
+      const anchor = document.createElement('a')
+      anchor.download = `${documentTitle.replace(/[<>:"/\\|?*]/g, '-')} - ${week} - ${printMode === 'grilla' ? 'semanal' : 'detallado'}.png`
+      anchor.href = image
+      anchor.click()
+      setNotice('Informe PNG descargado')
+    } catch {
+      setError('No se pudo generar la imagen. Intentá descargarla nuevamente.')
+    } finally { setExportingImage(false) }
+  }
+
   function importBackup(file: File) {
     file.text().then(content => {
       const value: unknown = JSON.parse(content)
       if (!value || typeof value !== 'object' || !('clients' in value) || !('reviews' in value) || !('pending' in value) || !('closed' in value) || !Array.isArray(value.clients) || !Array.isArray(value.reviews) || !Array.isArray(value.pending) || !Array.isArray(value.closed)) throw Error('Formato inválido')
       if (value.reviews.some(item => !item || typeof item !== 'object' || ('actionEntries' in item && (!validReviewActions(item.actionEntries) || item.actionSchemaVersion !== ACTION_SCHEMA_VERSION)))) throw Error('Acciones inválidas')
       if (window.confirm('¿Reemplazar todos los datos por este respaldo?')) {
-        setDb(value as Store)
+        const store = reconcileAccounts(value as Store)
+        setDb({ ...store, clients: sortClients(store.clients) })
         setNotice('Respaldo restaurado')
       }
     }).catch(() => setError('El respaldo no es válido.'))
@@ -328,14 +362,15 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
 
   return <MotionConfig reducedMotion="user"><div className="app-shell">
     <header className="app-navigation screen">
-      <div className="wordmark"><span className="wordmark-symbol">f.</span><strong>informes<span>fng</span></strong></div>
+      <div className="wordmark"><span className="wordmark-symbol">f.</span><div><strong>Informes FNG</strong><small>Mi libreta de trabajo</small></div></div>
       <LayoutGroup id="workspace-navigation"><nav aria-label="Navegación principal">
         {navItems.map(item => <motion.button whileTap={calm ? undefined : { scale: .97 }} key={item.id} aria-current={tab === item.id ? 'page' : undefined} className={tab === item.id ? 'active' : ''} onClick={() => navigate(item.id)}>{tab === item.id ? <motion.span className="navigation-highlight" layoutId="active-navigation" transition={calm ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 36 }} /> : null}<span className="navigation-icon">{item.id === 'jornada' ? <AnimatedChart active={tab === item.id} /> : <Icon name={item.icon} />}</span><span className="navigation-label">{item.label}</span>{item.id === 'jornada' && pending.length > 0 ? <b>{pending.length}</b> : null}</motion.button>)}
       </nav></LayoutGroup>
-      <span className="storage-indicator"><i />{storageMode === 'cloud' ? 'Conectado' : 'En este dispositivo'}</span>
+      <div className="navigation-tools"><span className="storage-indicator"><i />{storageMode === 'cloud' ? 'Conectado' : 'En este dispositivo'}</span><ThemeToggle /></div>
     </header>
 
-    <motion.main className="workspace screen" key={tab} initial={calm ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: calm ? 0 : .24, ease: [0.22, 1, 0.36, 1] }}>
+    <div className="notebook-pages screen"><AnimatePresence mode="wait" initial={false} custom={direction} onExitComplete={() => window.scrollTo({ top: scrollPositions.current[tab] ?? 0, behavior: 'instant' })}>
+    <motion.main className="workspace notebook-page" key={tab} custom={direction} variants={{ enter: (side: number) => ({ opacity: 0, x: calm ? 0 : `${side * 8}%`, rotateY: calm ? 0 : side * -4 }), present: { opacity: 1, x: 0, rotateY: 0 }, leave: (side: number) => ({ opacity: 0, x: calm ? 0 : `${side * -8}%`, rotateY: calm ? 0 : side * 4 }) }} initial="enter" animate="present" exit="leave" transition={{ duration: calm ? 0 : .24, ease: [.22, 1, .36, 1] }} onAnimationComplete={definition => { if (definition === 'present') setTurningPage(false) }} style={{ transformOrigin: direction > 0 ? 'left center' : 'right center' }}>
       <header className="page-header">
         <div><span className="eyebrow">{title.eyebrow}</span><h1>{title.title}</h1><p>{title.description}</p></div>
         <div className="header-actions"><span className="date-chip">{longToday}</span><button className="primary-button" onClick={() => openReview('', today)} disabled={active.length === 0}><Icon name="plus" />Registrar revisión</button></div>
@@ -393,7 +428,7 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
 
       {tab === 'clientes' ? <>
         <section className="panel client-toolbar">
-          <form className="add-client" onSubmit={addClient}><label htmlFor="new-client">Nuevo cliente</label><div><input id="new-client" value={newName} onChange={event => setNewName(event.target.value)} placeholder="Nombre de la empresa" /><button className="primary-button" type="submit" disabled={!newName.trim()}><Icon name="plus" />Agregar cliente</button></div></form>
+          <form className="add-client" onSubmit={addClient}><span className="field-label">Nuevo cliente</span><div className="new-client-fields"><label htmlFor="new-client">Nombre<input id="new-client" value={newName} onChange={event => { setNewName(event.target.value); setNewClientError('') }} placeholder="Nombre de la empresa" required maxLength={120} /></label><label htmlFor="new-account-id">ID de cuenta publicitaria (Meta)<input id="new-account-id" type="text" inputMode="numeric" value={newAccountId} onChange={event => { setNewAccountId(event.target.value); setNewClientError('') }} placeholder="Ej.: 2980180415592669" required maxLength={30} aria-describedby="new-client-help" aria-invalid={Boolean(newClientError)} /></label><button className="primary-button" type="submit" disabled={!newName.trim() || !newAccountId.trim()}><Icon name="plus" />Agregar cliente</button></div><p className="new-client-help" id="new-client-help">Copiá el ID de la cuenta en Meta. Se usará para identificar al cliente desde Companion.</p>{newClientError ? <p className="new-client-error" role="alert">{newClientError}</p> : null}</form>
           <div className="backup-actions"><span>Respaldo de datos</span><div><button className="secondary-button" onClick={exportBackup}><Icon name="download" />Exportar</button><label className="secondary-button file-button"><Icon name="upload" />Importar<input type="file" accept=".json,application/json" onChange={event => { const file = event.target.files?.[0]; if (file) importBackup(file); event.target.value = '' }} /></label></div></div>
         </section>
 
@@ -404,7 +439,7 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
             const reviewCount = db.reviews.filter(item => item.clientId === clientItem.id).length
             const pendingCount = db.pending.filter(item => item.clientId === clientItem.id && !item.resolved).length
             return <article key={clientItem.id} className="client-management-row">
-              <div className="client-identity"><span className="client-avatar large">{clientItem.name.slice(0, 2)}</span><div><strong>{clientItem.name}</strong><small>Agregado a la cartera FNG</small></div></div>
+              <div className="client-identity"><span className="client-avatar large">{clientItem.name.slice(0, 2)}</span><div><strong>{clientItem.name}</strong>{clientItem.advertisingAccounts?.length ? clientItem.advertisingAccounts.map(account => <small key={account.accountId} className="account-binding"><span>{account.owner}</span><button type="button" title="Copiar ID de cuenta publicitaria" onClick={() => { navigator.clipboard.writeText(account.accountId).then(() => setNotice('ID de cuenta copiado')).catch(() => setError('No se pudo copiar el ID.')) }}>Meta · {account.accountId}</button></small>) : <small>Sin cuenta publicitaria vinculada</small>}</div></div>
               <div className="client-stats"><span><b>{reviewCount}</b> revisiones</span><span><b>{pendingCount}</b> pendientes</span></div>
               <span className={`state-pill ${clientItem.active ? 'done' : 'archived'}`}>{clientItem.active ? 'Activo' : 'Archivado'}</span>
               <div className="row-actions"><button className="icon-button" onClick={() => toggleClient(clientItem)} title={clientItem.active ? 'Archivar' : 'Reactivar'} aria-label={clientItem.active ? `Archivar ${clientItem.name}` : `Reactivar ${clientItem.name}`}><Icon name="archive" /></button><button className="icon-button danger-icon" onClick={() => deleteClient(clientItem)} title="Eliminar" aria-label={`Eliminar ${clientItem.name}`}><Icon name="trash" /></button></div>
@@ -417,26 +452,20 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
         <section className="panel report-controls">
           <div><span className="section-kicker">PERÍODO</span><h2>Semana del {weekLabel}</h2></div>
           <WeekPicker label={weekLabel} onPrevious={() => changeWeek(-1)} onNext={() => changeWeek(1)} />
+          <label className="report-title-label" htmlFor="report-title">Título del documento<input className="report-title-input" id="report-title" value={reportTitle} maxLength={80} onChange={event => setReportTitle(event.target.value)} placeholder="Informe Ian" /></label>
           <div className="report-mode"><span className="section-kicker">FORMATO DEL INFORME</span><button className={printMode === 'grilla' ? 'active' : ''} onClick={() => setPrintMode('grilla')}><span><Icon name="calendar" /></span><div><strong>Planilla semanal</strong><small>Matriz de clientes por día</small></div><i>{printMode === 'grilla' ? <Icon name="check" size={14} /> : null}</i></button><button className={printMode === 'detalle' ? 'active' : ''} onClick={() => setPrintMode('detalle')}><span><Icon name="report" /></span><div><strong>Informe detallado</strong><small>Acciones y observaciones</small></div><i>{printMode === 'detalle' ? <Icon name="check" size={14} /> : null}</i></button></div>
           <div className="report-summary"><div><span>Revisiones</span><strong>{inWeek.length}</strong></div><div><span>Clientes cubiertos</span><strong>{new Set(inWeek.map(item => item.clientId)).size}</strong></div><div><span>Pendientes</span><strong>{pending.length}</strong></div></div>
-          <button className="primary-button print-button" onClick={() => window.print()}><Icon name="print" />Imprimir o guardar PDF</button>
+          <div className="report-downloads"><button className="primary-button print-button" onClick={() => { const title = document.title; document.title = `${documentTitle} - ${week}`; window.print(); document.title = title }}><Icon name="print" />Imprimir o guardar PDF</button><button className="secondary-button" onClick={downloadPng} disabled={exportingImage}><Icon name="download" />{exportingImage ? 'Preparando imagen…' : 'Descargar PNG'}</button></div>
           <p className="helper-text">El navegador abrirá el diálogo de impresión. Elegí “Guardar como PDF” para generar el archivo.</p>
         </section>
 
-        <section className="report-preview-wrap"><div className="preview-label"><span>Vista previa</span><span>A4 vertical</span></div><div className="report-preview">
-          <header><div className="report-brand"><span>F</span><div><strong>INFORMES FNG</strong><small>SEGUIMIENTO PUBLICITARIO</small></div></div><div><small>SEMANA</small><strong>{weekLabel}</strong></div></header>
-          {printMode === 'grilla' ? <table><thead><tr><th>CLIENTE</th>{days.map((day, index) => <th key={day}>{weekdays[index]}<small>{format(day)}</small></th>)}</tr></thead><tbody>{active.map(clientItem => <tr key={clientItem.id}><td>{clientItem.name}</td>{days.map(day => <td key={day}>{findReview(clientItem.id, day) ? <Icon name="check" size={13} /> : null}</td>)}</tr>)}</tbody></table> : <div className="detail-preview"><p className="report-lead">{inWeek.length} revisiones realizadas durante el período.</p>{db.clients.map(clientItem => {
-            const entries = inWeek.filter(item => item.clientId === clientItem.id).sort((a, b) => a.date.localeCompare(b.date))
-            return entries.length ? <section key={clientItem.id}><h3>{clientItem.name}</h3>{entries.map(item => <article key={item.id}><b>{format(item.date)}</b><p><strong>Acciones:</strong> {describeReviewActions(item) || 'Sin modificaciones registradas.'}</p><p><strong>Observaciones:</strong> {item.observations || 'Sin observaciones registradas.'}</p></article>)}</section> : null
-          })}{!inWeek.length ? <EmptyState icon="report" title="Sin revisiones" text="Todavía no hay actividad registrada para esta semana." /> : null}<section><h3>Pendientes abiertos</h3>{pending.length ? pending.map(item => <p key={item.id}><strong>{db.clients.find(clientItem => clientItem.id === item.clientId)?.name}:</strong> {item.text}</p>) : <p>Sin pendientes abiertos.</p>}</section></div>}
-          <footer><span>Documento de seguimiento interno</span><span>Generado el {new Date().toLocaleDateString('es-AR')}</span></footer>
-        </div></section>
+        <NotebookReport store={db} week={week} mode={printMode} title={documentTitle} preview />
       </div> : null}
-    </motion.main>
+    </motion.main></AnimatePresence></div>
 
     {selected ? <dialog ref={dialogRef} className={`review-modal screen ${closingReview ? 'is-closing' : ''}`} aria-labelledby="review-title" onCancel={event => { event.preventDefault(); closeReview() }} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeReview() } }}>
         <header><div><span className="section-kicker">REVISIÓN · {format(selected.day)}</span><h2 id="review-title">{client?.name ?? 'Nueva revisión'}</h2><p>Una revisión también cuenta si no hiciste cambios.</p></div><button className="icon-button" onClick={() => closeReview()} aria-label="Cerrar"><Icon name="close" /></button></header>
-        <label>Cliente<select value={selected.id} onChange={event => { if ((actions || observations || pendingText || actionEntries.length) && !window.confirm('¿Cambiar de cliente y descartar lo que estás escribiendo?')) return; openReview(event.target.value, selected.day) }}><option value="" disabled>Elegí un cliente</option>{active.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <ClientPicker clients={active} value={selected.id} onChange={id => { if ((actions || observations || pendingText || actionEntries.length) && !window.confirm('¿Cambiar de cliente y descartar lo que estás escribiendo?')) return; openReview(id, selected.day) }} />
         <QuickActions value={actionEntries} onChange={setActionEntries} />
         <label>Otros detalles<textarea rows={2} value={actions} onChange={event => setActions(event.target.value)} placeholder="Algo más que quieras registrar…" /></label>
         <label>Observaciones<textarea rows={4} value={observations} onChange={event => setObservations(event.target.value)} placeholder="Qué detectaste y qué conviene seguir…" /></label>
@@ -444,13 +473,6 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
         <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : <span />}<div><button className="secondary-button" onClick={() => closeReview()}>Cancelar</button><button className="primary-button" disabled={!client || closingReview} onClick={saveReview}><Icon name="check" />Guardar revisión</button></div></footer>
     </dialog> : null}
 
-    <div className="print-paper">
-      <header><div className="print-brand"><span>F</span><div><h1>INFORMES FNG</h1><p>Seguimiento publicitario semanal</p></div></div><div><small>SEMANA</small><strong>{weekLabel}</strong></div></header>
-      {printMode === 'grilla' ? <table className="paper-grid"><thead><tr><th>CLIENTE</th>{days.map((day, index) => <th key={day}>{weekdays[index]}<small>{format(day)}</small></th>)}</tr></thead><tbody>{active.map(clientItem => <tr key={clientItem.id}><td>{clientItem.name}</td>{days.map(day => <td key={day}>{findReview(clientItem.id, day) ? '✓' : ''}</td>)}</tr>)}</tbody></table> : <div className="paper-detail"><p>{inWeek.length} revisiones realizadas</p>{db.clients.map(clientItem => {
-        const entries = inWeek.filter(item => item.clientId === clientItem.id).sort((a, b) => a.date.localeCompare(b.date))
-        return entries.length ? <section key={clientItem.id}><h2>{clientItem.name}</h2>{entries.map(item => <article key={item.id}><b>{format(item.date)}</b><p><strong>Acciones: </strong>{describeReviewActions(item) || 'Sin modificaciones registradas.'}</p><p><strong>Observaciones: </strong>{item.observations || 'Sin observaciones registradas.'}</p></article>)}</section> : null
-      })}<h2>Pendientes abiertos</h2>{pending.length ? pending.map(item => <p key={item.id}><strong>{db.clients.find(clientItem => clientItem.id === item.clientId)?.name}:</strong> {item.text}</p>) : <p>Sin pendientes abiertos.</p>}</div>}
-      <footer><span>Documento de seguimiento interno</span><span>Generado el {new Date().toLocaleDateString('es-AR')}</span></footer>
-    </div>
+    <NotebookReport store={db} week={week} mode={printMode} title={documentTitle} />
   </div></MotionConfig>
 }
