@@ -5,6 +5,9 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — documentación y estabilización del PR #1
 
 ### Interfaz operativa
+- Transición lateral con entrada/salida solapadas, recorrido corto y sin rotación ni pausa entre secciones.
+- Contadores de informes centrados con una altura común para sus etiquetas.
+- Footer con copyright de Ian Pontorno, enlace al portfolio y repositorio GitHub.
 - Clientes siempre ordenados alfabéticamente en jornada, semana, gestión, selector y documentos.
 - Alta de clientes exige nombre e ID numérico de cuenta Meta; rechazo de nombres/cuentas duplicados, incluso en clientes archivados.
 - Identidad de libreta con papel cálido, tinta, reglas sutiles y cambio lateral de páginas.
@@ -34,6 +37,7 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 - Lockfile incorporado para instalaciones reproducibles.
 
 ### Documentación
+- Análisis de persistencia actual, consulta mensual, consumo del Free tier y arquitectura compartida PC/Companion/móvil en `docs/HISTORICO_Y_SINCRONIZACION.md`.
 - README técnico: entorno, estructura, modelo de datos, persistencia, seguridad, impresión y limitaciones.
 - Inventario de [estado actual](docs/ESTADO_ACTUAL.md), [backlog priorizado](docs/BACKLOG.md) y [roadmap](docs/ROADMAP.md).
 

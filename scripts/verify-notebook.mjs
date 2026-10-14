@@ -20,7 +20,7 @@ page.on('pageerror', error => errors.push(error.message))
 async function navigate(label, heading) {
   await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: label, exact: true }).click()
   await page.getByRole('heading', { name: heading, exact: true }).waitFor()
-  await page.locator('.notebook-page').evaluate(element => new Promise(resolve => {
+  await page.locator('.notebook-page').filter({ has: page.getByRole('heading', { name: heading, exact: true }) }).evaluate(element => new Promise(resolve => {
     let frames = 0
     const check = () => {
       const style = getComputedStyle(element)
@@ -76,6 +76,10 @@ try {
   assert.equal(reviews.length, 1)
   assert.equal(reviews[0].actionEntries[0].typeId, 'meta.ad.created')
   await navigate('Informes', 'Informes')
+  const counterTops = await page.locator('.report-summary strong').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().top))
+  assert.ok(Math.max(...counterTops) - Math.min(...counterTops) < 1, 'Report counters must share the same baseline')
+  assert.equal(await page.locator('.site-footer a').first().getAttribute('href'), 'https://ian-pontorno-portfolio.vercel.app')
+  assert.equal(await page.locator('.repository-link').getAttribute('href'), 'https://github.com/Ian9Franco/INFORMES_FNG')
   await page.getByLabel('Título del documento').fill('Informe Ian')
   await page.screenshot({ path: path.join(output, 'desktop-report.png'), fullPage: true })
 

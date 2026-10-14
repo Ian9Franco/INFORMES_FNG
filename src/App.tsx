@@ -7,6 +7,7 @@ import ClientPicker from './components/ClientPicker'
 import NotebookReport from './components/NotebookReport'
 import { reconcileAccounts } from './account-catalog'
 import { newClient, sortClients } from './clients'
+import { ExternalLink } from 'lucide-react'
 import QuickActions from './components/QuickActions'
 import { AnimatedChart } from './components/AnimatedSymbols'
 import { ACTION_SCHEMA_VERSION, describeReviewActions, validReviewActions, type ReviewAction } from './review-actions'
@@ -128,6 +129,7 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
     setDirection(navItems.findIndex(item => item.id === next) > navItems.findIndex(item => item.id === tab) ? 1 : -1)
     setTurningPage(!calm)
     setTab(next)
+    window.scrollTo({ top: scrollPositions.current[next] ?? 0, behavior: calm ? 'instant' : 'smooth' })
   }
 
   function closeReview(force = false) {
@@ -369,8 +371,8 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
       <div className="navigation-tools"><span className="storage-indicator"><i />{storageMode === 'cloud' ? 'Conectado' : 'En este dispositivo'}</span><ThemeToggle /></div>
     </header>
 
-    <div className="notebook-pages screen"><AnimatePresence mode="wait" initial={false} custom={direction} onExitComplete={() => window.scrollTo({ top: scrollPositions.current[tab] ?? 0, behavior: 'instant' })}>
-    <motion.main className="workspace notebook-page" key={tab} custom={direction} variants={{ enter: (side: number) => ({ opacity: 0, x: calm ? 0 : `${side * 8}%`, rotateY: calm ? 0 : side * -4 }), present: { opacity: 1, x: 0, rotateY: 0 }, leave: (side: number) => ({ opacity: 0, x: calm ? 0 : `${side * -8}%`, rotateY: calm ? 0 : side * 4 }) }} initial="enter" animate="present" exit="leave" transition={{ duration: calm ? 0 : .24, ease: [.22, 1, .36, 1] }} onAnimationComplete={definition => { if (definition === 'present') setTurningPage(false) }} style={{ transformOrigin: direction > 0 ? 'left center' : 'right center' }}>
+    <div className="notebook-pages screen"><AnimatePresence mode="popLayout" initial={false} custom={direction}>
+    <motion.main className="workspace notebook-page" key={tab} custom={direction} variants={{ enter: (side: number) => ({ opacity: 0, x: calm ? 0 : side * 26 }), present: { opacity: 1, x: 0, transition: { duration: calm ? 0 : .46, ease: [.22, 1, .36, 1] } }, leave: (side: number) => ({ opacity: 0, x: calm ? 0 : side * -14, transition: { duration: calm ? 0 : .2, ease: [.4, 0, 1, 1] } }) }} initial="enter" animate="present" exit="leave" onAnimationComplete={definition => { if (definition === 'present') setTurningPage(false) }}>
       <header className="page-header">
         <div><span className="eyebrow">{title.eyebrow}</span><h1>{title.title}</h1><p>{title.description}</p></div>
         <div className="header-actions"><span className="date-chip">{longToday}</span><button className="primary-button" onClick={() => openReview('', today)} disabled={active.length === 0}><Icon name="plus" />Registrar revisión</button></div>
@@ -462,6 +464,8 @@ export default function App({ initialData, onChange, storageMode = 'local' }: { 
         <NotebookReport store={db} week={week} mode={printMode} title={documentTitle} preview />
       </div> : null}
     </motion.main></AnimatePresence></div>
+
+    <footer className="site-footer screen"><a href="https://ian-pontorno-portfolio.vercel.app" target="_blank" rel="noopener noreferrer">© {new Date().getFullYear()} Ian Pontorno<span>Diseño y desarrollo</span><ExternalLink size={13} aria-hidden="true" /></a><a className="repository-link" href="https://github.com/Ian9Franco/INFORMES_FNG" target="_blank" rel="noopener noreferrer" aria-label="Ver el código de Informes FNG en GitHub"><svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.49c-2.23.48-2.7-.95-2.7-.95-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.22.82 1.22.82.71 1.22 1.87.87 2.33.67.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.58.82-2.14-.08-.2-.36-1.02.08-2.12 0 0 .67-.22 2.2.82A7.65 7.65 0 0 1 8 3.87c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.14 0 3.07-1.87 3.75-3.65 3.95.29.25.54.74.54 1.49v2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z" /></svg><span>GitHub</span></a></footer>
 
     {selected ? <dialog ref={dialogRef} className={`review-modal screen ${closingReview ? 'is-closing' : ''}`} aria-labelledby="review-title" onCancel={event => { event.preventDefault(); closeReview() }} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeReview() } }}>
         <header><div><span className="section-kicker">REVISIÓN · {format(selected.day)}</span><h2 id="review-title">{client?.name ?? 'Nueva revisión'}</h2><p>Una revisión también cuenta si no hiciste cambios.</p></div><button className="icon-button" onClick={() => closeReview()} aria-label="Cerrar"><Icon name="close" /></button></header>
