@@ -2,7 +2,7 @@
 
 Aplicación de seguimiento **personal** de trabajo en Meta Ads para Fanger Design. Permite registrar revisiones por cliente y día, describir cambios u observaciones, gestionar pendientes y emitir la planilla semanal que se entrega los lunes.
 
-**Estado:** MVP en desarrollo, PR [#1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1) en borrador. Build CI [aprobado](https://github.com/Ian9Franco/INFORMES_FNG/actions/runs/38448153350). **No se considera listo para producción.** Consultar [estado actual](docs/ESTADO_ACTUAL.md) y [limitaciones](#limitaciones-y-riesgos).
+**Estado:** MVP en desarrollo sobre `main`. El PR fundacional [#1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1) ya fue integrado. La interfaz operativa está disponible, pero **todavía no se considera lista para producción** hasta completar las validaciones de datos, Auth/RLS e impresión. Consultar [estado actual](docs/ESTADO_ACTUAL.md) y [limitaciones](#limitaciones-y-riesgos).
 
 ## Índice de documentación
 
@@ -38,7 +38,6 @@ Aplicación de seguimiento **personal** de trabajo en Meta Ads para Fanger Desig
 ```bash
 git clone https://github.com/Ian9Franco/INFORMES_FNG.git
 cd INFORMES_FNG
-git switch feat/pwa-foundation
 npm install
 cp .env.example .env.local
 npm run dev
@@ -100,10 +99,10 @@ La importación desde JSON requiere confirmación y reemplaza el estado completo
 
 ## Recorrido funcional
 
-1. **Mi jornada:** muestra clientes activos revisados/no revisados hoy y pendientes abiertos.
+1. **Mi jornada:** muestra progreso, clientes activos revisados/no revisados hoy y pendientes abiertos.
 2. **Semana:** matriz de lunes a sábado. Cada cliente puede tener **una revisión por fecha**, con campos de acciones y observaciones.
-3. **Clientes:** alta y archivo (sin borrar historial), exportación/importación JSON.
-4. **Informes:** selección de semana y formato **grilla A4 vertical** o **informe detallado**. El diálogo del navegador permite imprimir o guardar como PDF.
+3. **Clientes:** búsqueda, filtros, alta, archivo/reactivación y eliminación definitiva solo cuando no existe historial; exportación/importación JSON.
+4. **Informes:** selección de semana, vista previa y formato **grilla A4 vertical** o **informe detallado**. El diálogo del navegador permite imprimir o guardar como PDF.
 5. **Lunes:** se visualiza automáticamente la semana corriente limpia, independientemente de las anteriores. El cierre de la semana pasada es **manual**; no se genera ni se envía automáticamente el informe. Los pendientes sobreviven al cambio.
 
 El informe detallado incluye pendientes abiertos **al momento de imprimir**, no un snapshot histórico del día del cierre. Los registros de semanas cerradas pueden reabrirse manualmente.

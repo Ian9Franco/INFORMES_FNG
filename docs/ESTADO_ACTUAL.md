@@ -2,7 +2,7 @@
 
 **Corte documental:** 2026-10-13.  
 **Repositorio:** [Ian9Franco/INFORMES_FNG](https://github.com/Ian9Franco/INFORMES_FNG)  
-**Implementación inspeccionada:** rama `feat/pwa-foundation`, [PR #1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1), en borrador y sin fusionar.  
+**Implementación actual:** rama `main`; el [PR fundacional #1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1) ya fue fusionado.
 **Madurez:** MVP técnico / prototipo funcional, **no validado para producción**.
 
 ## Propósito del producto
@@ -15,13 +15,13 @@ Bitácora personal de optimización y revisiones de Meta Ads para organizar el t
 | --- | --- | --- |
 | Next.js + React + TypeScript | Implementado | Next 15 App Router, React 19, sin Vite |
 | Pantalla Mi jornada | Implementado | Cantidad revisada hoy, por revisar y pendientes |
-| Listado de clientes | Implementado | 27 nombres iniciales desde la foto; alta y archivo |
+| Listado de clientes | Implementado | 27 nombres iniciales; búsqueda, filtros, alta, archivo/reactivación y borrado seguro sin historial |
 | Grilla semanal | Implementado | LUN–SÁB, selección de cliente × fecha |
 | Revisión / acciones / observaciones | Implementado | Una revisión por cliente/día, texto libre |
 | Pendientes | Implementado | Crear desde revisión, cerrar desde jornada, persisten entre semanas |
 | Cambio de semana | Implementado | Cálculo automático de lunes y navegación por semanas |
 | Cierre y reapertura | Implementado | Bloquea edición en la grilla; cierre manual reversible |
-| Exportación | Implementado | HTML imprimible A4 y opción «Guardar como PDF» del navegador |
+| Exportación | Implementado | Vista previa, HTML imprimible A4 y opción «Guardar como PDF» del navegador |
 | Backups | Implementado parcialmente | JSON manual y copia `localStorage`, validación superficial |
 | Auth | Implementado en código | Supabase sign-in por magic link; falta verificación end-to-end |
 | Persistencia remota | Implementado en código | `public.workspaces`, snapshot JSONB por usuario |
@@ -60,7 +60,7 @@ No se usa `@supabase/ssr`, middleware/proxy de sesión ni Server Actions para op
 ## Estado de verificación
 
 - **Confirmado en Supabase:** proyecto «Informes FnG» con referencia `zxhxerhksohymmyofvqb`; tabla `public.workspaces` existente y RLS habilitado.
-- **Confirmado en GitHub:** PR #1 abierto como borrador; la rama no está integrada en `main`.
+- **Estado local:** el PR #1 está integrado en `main` y el repositorio local sigue `origin/main`.
 - **Build previo:** ejecución del 2026-10-13 [GitHub Actions #38447396426](https://github.com/Ian9Franco/INFORMES_FNG/actions/runs/38447396426) terminó en **failure** por `Property 'catch' does not exist on type 'PromiseLike<void>'` en `WorkspaceGate.tsx`. Se incluyó una corrección en esta iteración; verificar el check del nuevo commit antes de declarar la compilación aprobada.
 - **Build de esta iteración:** [GitHub Actions #38448153350](https://github.com/Ian9Franco/INFORMES_FNG/actions/runs/38448153350), **success** (instalación y `npm run build`). No equivale a pruebas funcionales del producto.
 - **Sin evidencia aún** de pruebas E2E de login, sincronización entre dos dispositivos, impresión física A4 ni instalación PWA en equipos reales.

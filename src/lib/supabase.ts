@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 const url=process.env.NEXT_PUBLIC_SUPABASE_URL
 const key=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-if(!url||!key)throw new Error('Faltan NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')
-export const supabase=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}})
+export const isSupabaseConfigured=Boolean(url&&key&&!url.includes('YOUR_PROJECT')&&!url.includes('example.supabase.co')&&!key.includes('YOUR_KEY')&&!key.includes('placeholder'))
+export const supabase=isSupabaseConfigured&&url&&key?createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null

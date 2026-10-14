@@ -4,6 +4,14 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 
 ## [Unreleased] — documentación y estabilización del PR #1
 
+### Interfaz operativa
+- Rediseño responsive de jornada, semana, clientes e informes con navegación accesible.
+- Gestión de clientes con búsqueda, filtros, alta, archivo, reactivación y borrado seguro solo cuando no existe historial.
+- Formulario completo de revisión con acciones, observaciones y pendientes; estados y confirmaciones visibles.
+- Vista previa A4 para planilla semanal e informe detallado antes de imprimir o guardar como PDF.
+- Modo local automático cuando Supabase todavía no está configurado y estado de almacenamiento visible.
+- Lockfile incorporado para instalaciones reproducibles.
+
 ### Documentación
 - README técnico: entorno, estructura, modelo de datos, persistencia, seguridad, impresión y limitaciones.
 - Inventario de [estado actual](docs/ESTADO_ACTUAL.md), [backlog priorizado](docs/BACKLOG.md) y [roadmap](docs/ROADMAP.md).
