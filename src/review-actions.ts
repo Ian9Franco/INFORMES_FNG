@@ -1,6 +1,14 @@
 /** Immutable integration keys. Labels may change; IDs must never be renamed/reused. */
 export const ACTION_SCHEMA_VERSION = 1 as const
 export type AdPlatform = 'meta_ads' | 'google_ads'
+export const STORY_DAYS = [
+  { id: 'mon', short: 'Lun', label: 'lunes' }, { id: 'tue', short: 'Mar', label: 'martes' },
+  { id: 'wed', short: 'Mié', label: 'miércoles' }, { id: 'thu', short: 'Jue', label: 'jueves' },
+  { id: 'fri', short: 'Vie', label: 'viernes' }, { id: 'sat', short: 'Sáb', label: 'sábado' },
+  { id: 'sun', short: 'Dom', label: 'domingo' },
+] as const
+export type StoryDay = typeof STORY_DAYS[number]['id']
+export const todayStoryDay = (): StoryDay => STORY_DAYS[(new Date().getDay() + 6) % 7].id
 export const ACTION_TYPES = [
   { id: 'meta.ad.created', platform: 'meta_ads', label: 'Añadí anuncios', unit: 'anuncios' },
   { id: 'meta.ad.deleted', platform: 'meta_ads', label: 'Eliminé anuncios', unit: 'anuncios' },
@@ -10,6 +18,7 @@ export const ACTION_TYPES = [
   { id: 'meta.adset.created', platform: 'meta_ads', label: 'Creé conjuntos', unit: 'conjuntos' },
   { id: 'meta.budget.updated', platform: 'meta_ads', label: 'Ajusté presupuestos', unit: 'ajustes' },
   { id: 'meta.audience.updated', platform: 'meta_ads', label: 'Actualicé audiencias', unit: 'audiencias' },
+  { id: 'meta.story.scheduled', platform: 'meta_ads', label: 'Programé historia', unit: 'historias' },
   { id: 'google.ad.created', platform: 'google_ads', label: 'Añadí anuncios', unit: 'anuncios' },
   { id: 'google.ad.deleted', platform: 'google_ads', label: 'Eliminé anuncios', unit: 'anuncios' },
   { id: 'google.ad.updated', platform: 'google_ads', label: 'Actualicé anuncios', unit: 'anuncios' },
@@ -30,6 +39,7 @@ export type ReviewAction = {
   source: 'manual' | 'companion'
   evidence: 'user_confirmed' | 'observed'
   sourceEventId?: string
+  scheduledDays?: StoryDay[]
 }
 
 export function actionDefinition(id: string) { return ACTION_TYPES.find(item => item.id === id) }
@@ -42,6 +52,9 @@ export function validReviewActions(value: unknown): value is ReviewAction[] {
     if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id || ids.has(item.id) || types.has(item.typeId) || !actionDefinition(item.typeId) || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 999 || !['manual', 'companion'].includes(item.source) || !['user_confirmed', 'observed'].includes(item.evidence)) return false
     if (item.source === 'manual' && item.evidence !== 'user_confirmed') return false
     if (item.source === 'companion' && (typeof item.sourceEventId !== 'string' || !item.sourceEventId)) return false
+    if (item.typeId === 'meta.story.scheduled') {
+      if (!Array.isArray(item.scheduledDays) || !item.scheduledDays.length || item.scheduledDays.length > 7 || new Set(item.scheduledDays).size !== item.scheduledDays.length || item.scheduledDays.some((day: unknown) => !STORY_DAYS.some(option => option.id === day))) return false
+    } else if (item.scheduledDays !== undefined) return false
     ids.add(item.id); types.add(item.typeId)
     return true
   })
@@ -51,7 +64,13 @@ export function describeReviewActions(review: { actions: string; actionEntries?:
   const entries = validReviewActions(review.actionEntries) ? review.actionEntries : []
   const lines = entries.map(item => {
     const definition = actionDefinition(item.typeId)!
-    return `${definition.platform === 'meta_ads' ? 'Meta' : 'Google'} · ${definition.label}: ${item.quantity}${item.evidence === 'observed' ? ' (por confirmar)' : ''}`
+    const scheduled = item.typeId === 'meta.story.scheduled' ? ` · para ${STORY_DAYS.filter(day => item.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')}` : ''
+    return `${definition.platform === 'meta_ads' ? 'Meta' : 'Google'} · ${definition.label}: ${item.quantity}${scheduled}${item.evidence === 'observed' ? ' (por confirmar)' : ''}`
   })
   return [...lines, review.actions].filter(Boolean).join('\n')
+}
+
+export function storyDaysLabel(reviews: { actionEntries?: ReviewAction[] }[], short = true) {
+  const selected = new Set(reviews.flatMap(review => (review.actionEntries ?? []).filter(entry => entry.typeId === 'meta.story.scheduled').flatMap(entry => entry.scheduledDays ?? [])))
+  return STORY_DAYS.filter(day => selected.has(day.id)).map(day => short ? day.short : day.label).join(' · ')
 }

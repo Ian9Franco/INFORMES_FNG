@@ -1,7 +1,7 @@
 @media screen {
   .daily-filter { margin: 4px 0 14px; width: fit-content; }
   .daily-filter button { min-height: 40px; }
-  .review-item { border-bottom: 1px solid var(--rule); scroll-margin-top: 108px; }
+  .review-item { scroll-margin-top: 108px; }
   .review-row-header { display: flex; align-items: center; gap: 8px; }
   .review-row-header .review-row { flex: 1; min-width: 0; border: 0; padding-inline: 0; }
   .review-item.is-expanded { background: var(--surface-soft); border-radius: 18px; padding-inline: 12px; margin-inline: -12px; }

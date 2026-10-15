@@ -51,11 +51,11 @@ La bandeja **Actividad de tu PC** muestra esas sesiones. Su duración es aproxim
 
 ## Verificación y límites de evidencia
 
-- 22 pruebas automatizadas: contratos, IDs, cola, concurrencia, borradores/siguiente/deshacer, validación de contraseña/enlaces y migraciones/RPC en PostgreSQL aislado (PGlite).
+- 23 pruebas automatizadas: contratos, historias con días destino, IDs, cola, concurrencia, borradores/siguiente/deshacer, validación de contraseña/enlaces y migraciones/RPC en PostgreSQL aislado (PGlite).
 - `scripts/verify-auth.mjs`: navegador móvil con Auth simulado verifica ingreso sin correos, error de cupo y bloqueo de reenvíos, contraseña confirmada sin guardarla en localStorage y retorno de recuperación. No envía emails ni cambia cuentas reales.
 - Dos navegadores con Auth/REST/Realtime simulados: una revisión se refleja en móvil, no hay eco de escrituras, se conserva el borrador frente a edición remota y se reenvía al reconectar; histórico mensual filtrado.
 - Registro rápido: confirmación/deshacer entre dispositivos, borrador sin escrituras remotas tras recarga, chips estables, favoritas, guardar fijo en móvil/modal, siguiente y atajo de teclado. Ver [guía de uso](REGISTRO_RAPIDO.md).
-- Supabase real: migraciones aplicadas, RLS habilitado, publicación Realtime y permisos que impiden escrituras/ingesta anónimas comprobados; advisors de seguridad sin hallazgos.
+- Supabase real: migraciones aplicadas, RLS habilitado, publicación Realtime y permisos que impiden escrituras/ingesta anónimas comprobados. La migración de historias conserva `SECURITY INVOKER` y la función no es ejecutable por `anon`. El advisor del 15/10 advierte **Leaked Password Protection Disabled** en Auth: [detalle y configuración](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). No se cambió esa configuración ni se desactivó protección alguna en esta tarea.
 - Las pruebas iniciales de CAS/RLS en transacciones revertidas pasaron. La revisión automática rechazó posteriormente crear cuentas Auth para pruebas adicionales; no se crearon cuentas ni se verificó el login real de una identidad humana.
 - La prueba final con correo real y entre dispositivos físicos corresponde a la cuenta del usuario en producción.
 

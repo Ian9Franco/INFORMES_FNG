@@ -77,6 +77,12 @@ No copiar cookies o tokens de la PWA a la extensión. Definir Auth para Chrome E
 - Tiempos en UTC y visualización según la zona horaria elegida.
 - La falta de eventos de Chrome no demuestra que la cuenta no se revisó: podría haber otro navegador/dispositivo.
 
-## Reglas de notificación y móvil
+## Acción declarada: historia programada
+
+El catálogo web incluye el ID inmutable `meta.story.scheduled`. En `ReviewAction`, `quantity` indica la cantidad de historias y `scheduledDays` contiene días destino únicos: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun` (uno a siete). Ejemplo: `{ "id": "uuid", "typeId": "meta.story.scheduled", "quantity": 1, "scheduledDays": ["mon", "thu"], "source": "manual", "evidence": "user_confirmed" }`.
+
+Es una declaración de trabajo registrado, no una orden para publicar en Meta. La extensión continúa enviando sesiones observadas, no inventa esta acción ni sus días destino. Una futura sugerencia de Companion deberá tener `sourceEventId` y confirmación explícita como las demás acciones. La fecha de revisión es la de registro; `scheduledDays` no reemplaza esa fecha.
+
+## Notificaciones (pendiente)
 
 Leer [RECORDATORIOS.md](RECORDATORIOS.md) antes de implementar push. Todo queda como propuesta pendiente de desarrollo.

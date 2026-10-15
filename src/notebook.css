@@ -42,12 +42,11 @@
   .app-navigation nav button, .storage-indicator { color: var(--muted); }
   .app-navigation nav button.active { color: var(--accent); }
   .navigation-highlight, .app-navigation nav button b { background: var(--accent-soft); color: var(--accent); }
-  .notebook-pages { position: relative; overflow: clip; min-height: calc(100svh - 86px); }
+  .notebook-pages { position: relative; overflow: visible; min-height: calc(100svh - 86px); }
   .notebook-page { will-change: transform,opacity; }
   .page-header h1, .hero-panel h2 { font-family: Georgia,'Times New Roman',serif; font-weight: 500; letter-spacing: -.04em; }
   .panel, .hero-panel, .metrics-grid article { background: var(--glass); border-radius: 16px; box-shadow: 0 4px 16px rgba(15,25,16,.025); }
   .hero-panel { background: linear-gradient(115deg,var(--surface),var(--accent-soft)); }
-  .review-list, .task-list { background-image: repeating-linear-gradient(to bottom,transparent,transparent 65px,var(--rule) 65px,var(--rule) 66px); }
   .review-row, .task-row, .client-management-row { border-color: var(--rule); }
   .review-row:hover { background: var(--surface-soft); }
   .page-header p, .metrics-grid small, .metrics-grid p, .panel-heading p, .hero-panel p,

@@ -1,13 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { PGlite } from '@electric-sql/pglite'
 
 test('isolated PostgreSQL: CAS, RLS, account matching, event deduplication and lifecycle guards', async () => {
   const db = new PGlite()
   try {
     await db.exec(`create schema auth; create table auth.users(id uuid primary key,email text); create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; create role anon; create role authenticated; grant usage on schema auth to anon,authenticated; grant execute on function auth.uid() to anon,authenticated; create table public.workspaces(user_id uuid,data jsonb);`)
-    for (const file of ['20261014180302_record_workspace_sync.sql','20261014181358_authenticated_companion_ingest.sql','20261014181921_validate_record_lifecycle.sql','20261014183742_strict_record_payloads.sql','20261014184147_order_atomic_changes.sql']) {
+    const files=(await readdir(new URL('../supabase/migrations/',import.meta.url))).filter(file=>file.endsWith('.sql')&&!file.includes('create_personal_workspaces')).sort()
+    for (const file of files) {
       const sql = await readFile(new URL(`../supabase/migrations/${file}`, import.meta.url),'utf8')
       await db.exec(sql.replace('alter publication supabase_realtime add table public.fng_records;',''))
     }
@@ -26,6 +27,12 @@ test('isolated PostgreSQL: CAS, RLS, account matching, event deduplication and l
     await assert.rejects(write([{...review,expectedVersion:2,payload:{...review.payload,observations:'Cerrada'}}]),/cerrada/)
     await write([{...review,expectedVersion:2,payload:{...review.payload,observations:'Restaurada'}},{kind:'closure',id:'2026-10-12',expectedVersion:1,deleted:true,payload:{id:'2026-10-12'}}])
     assert.equal((await db.query("select payload->>'observations' as note from public.fng_records where kind='review'")).rows[0].note,'Restaurada')
+    const story={id:'s',typeId:'meta.story.scheduled',quantity:2,source:'manual',evidence:'user_confirmed',scheduledDays:['mon','thu']}
+    const storyReview={...review,expectedVersion:3,payload:{...review.payload,actionSchemaVersion:1,actionEntries:[story]}}
+    await write([storyReview])
+    assert.deepEqual((await db.query("select payload->'actionEntries'->0->'scheduledDays' as days from public.fng_records where kind='review'")).rows[0].days,['mon','thu'])
+    for(const scheduledDays of [[],['bad'],['mon','mon'],[1],[null]]) await assert.rejects(write([{...storyReview,expectedVersion:4,payload:{...storyReview.payload,actionEntries:[{...story,scheduledDays}]}}]),/Días programados/)
+    await assert.rejects(write([{...storyReview,expectedVersion:4,payload:{...storyReview.payload,actionEntries:[{...story,quantity:0}]}}]),/Acción inválida/)
     const events=[{id:'00000000-0000-4000-8000-000000000999',platform:'meta_ads',accountCandidate:'987654321',startedAt:new Date(Date.now()-600000).toISOString(),endedAt:new Date().toISOString(),focusedMs:600000,navigationSignals:4}]
     await db.query('select public.fng_ingest_activity($1::jsonb)',[JSON.stringify(events)])
     await db.query('select public.fng_ingest_activity($1::jsonb)',[JSON.stringify(events)])

@@ -13,9 +13,10 @@ import CompanionAccess from './components/CompanionAccess'
 import QuickActions from './components/QuickActions'
 import ReviewDetailsFields from './components/ReviewDetailsFields'
 import RapidReviewSection from './components/RapidReviewSection'
+import NotebookPage from './components/NotebookPage'
 import { draftChanged, draftKey, nextPendingClient, readDrafts, reviewSignature, type ReviewDrafts } from './review-workflow'
 import { AnimatedChart } from './components/AnimatedSymbols'
-import { ACTION_SCHEMA_VERSION, describeReviewActions, validReviewActions, type ReviewAction } from './review-actions'
+import { ACTION_SCHEMA_VERSION, describeReviewActions, storyDaysLabel, validReviewActions, type ReviewAction } from './review-actions'
 import {
   type Client,
   type Review,
@@ -124,6 +125,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const [notice, setNotice] = useState('')
   const [dailySearch, setDailySearch] = useState('')
   const [dailyFilter, setDailyFilter] = useState<'todos' | 'pendientes' | 'revisados'>('todos')
+  const [showActivity, setShowActivity] = useState(false)
   const [closingReview, setClosingReview] = useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const saveBarRef = useRef<HTMLDivElement>(null)
@@ -198,7 +200,6 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     setDirection(navItems.findIndex(item => item.id === next) > navItems.findIndex(item => item.id === tab) ? 1 : -1)
     setTurningPage(!calm)
     setTab(next)
-    window.scrollTo({ top: scrollPositions.current[next] ?? 0, behavior: calm ? 'instant' : 'smooth' })
   }
 
   function closeReview(force = false) {
@@ -503,13 +504,13 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     <header className="app-navigation screen">
       <div className="wordmark"><span className="wordmark-symbol">f.</span><div><strong>Informes FNG</strong><small>Mi libreta de trabajo</small></div></div>
       <LayoutGroup id="workspace-navigation"><nav aria-label="Navegación principal">
-        {navItems.map(item => <motion.button whileTap={calm ? undefined : { scale: .97 }} key={item.id} aria-current={tab === item.id ? 'page' : undefined} className={tab === item.id ? 'active' : ''} onClick={() => navigate(item.id)}>{tab === item.id ? <motion.span className="navigation-highlight" layoutId="active-navigation" transition={calm ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 36 }} /> : null}<span className="navigation-icon">{item.id === 'jornada' ? <AnimatedChart active={tab === item.id} /> : <Icon name={item.icon} />}</span><span className="navigation-label">{item.label}</span>{item.id === 'jornada' && pending.length > 0 ? <b>{pending.length}</b> : null}</motion.button>)}
+        {navItems.map(item => <motion.button whileHover={calm ? undefined : { scale: 1.035 }} whileTap={calm ? undefined : { scaleX: 1.06, scaleY: .9 }} transition={{ type: 'spring', stiffness: 450, damping: 18, mass: .55 }} key={item.id} aria-current={tab === item.id ? 'page' : undefined} className={tab === item.id ? 'active' : ''} onClick={() => navigate(item.id)}>{tab === item.id ? <motion.span className="navigation-highlight" layoutId="active-navigation" transition={calm ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 36 }} /> : null}<span className="navigation-icon">{item.id === 'jornada' ? <AnimatedChart active={tab === item.id} /> : <Icon name={item.icon} />}</span><span className="navigation-label">{item.label}</span>{item.id === 'jornada' && pending.length > 0 ? <b>{pending.length}</b> : null}</motion.button>)}
       </nav></LayoutGroup>
       <div className="navigation-tools"><span className="storage-indicator"><i />{storageMode === 'cloud' ? 'Conectado' : 'En este dispositivo'}</span><ThemeToggle /></div>
     </header>
 
-    <div className="notebook-pages screen"><AnimatePresence mode="popLayout" initial={false} custom={direction}>
-    <motion.main className="workspace notebook-page" key={tab} custom={direction} variants={{ enter: (side: number) => ({ opacity: 0, x: calm ? 0 : side * 26 }), present: { opacity: 1, x: 0, transition: { duration: calm ? 0 : .46, ease: [.22, 1, .36, 1] } }, leave: (side: number) => ({ opacity: 0, x: calm ? 0 : side * -14, transition: { duration: calm ? 0 : .2, ease: [.4, 0, 1, 1] } }) }} initial="enter" animate="present" exit="leave" onAnimationComplete={definition => { if (definition === 'present') setTurningPage(false) }}>
+    <div className="notebook-pages screen"><AnimatePresence mode="wait" initial={false} custom={direction} onExitComplete={() => requestAnimationFrame(() => window.scrollTo({ top: scrollPositions.current[tab] ?? 0, behavior: 'instant' }))}>
+    <NotebookPage key={tab} name={tab} side={direction} onEntered={() => setTurningPage(false)}>
       <header className="page-header">
         <div><span className="eyebrow">{title.eyebrow}</span><h1>{title.title}</h1><p>{title.description}</p></div>
         <div className="header-actions"><span className="date-chip">{longToday}</span><button className="primary-button" onClick={() => openReview('', today)} disabled={active.length === 0}><Icon name="plus" />Registrar revisión</button></div>
@@ -519,8 +520,8 @@ export default function App({ initialData, onChange, storageMode = 'local', user
       {notice ? <div role="status" className="toast"><Icon name="check" />{notice}</div> : null}
 
       {tab === 'jornada' ? <>
-        {(db.activity ?? []).some(event => event.status === 'pending' && event.date === today) ? <section className="panel activity-inbox"><div className="panel-heading"><div><span className="section-kicker">COMPANION</span><h2>Actividad de tu PC</h2><p>Sesiones observadas; confirmá la revisión para completar el día.</p></div></div>{(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).map(event => <article key={event.id}><div><strong>{clients.find(client => client.id === event.clientId)?.name ?? `Cuenta sin vincular: ${event.accountCandidate ?? 'sin ID'}`}</strong><p>{event.platform === 'meta_ads' ? 'Meta Ads' : 'Google Ads'} · {Math.floor(event.focusedMs / 60000)} min estimados · {event.navigationSignals} señales</p></div>{event.clientId ? <button className="secondary-button" onClick={() => openReview(event.clientId!, event.date)}>{findReview(event.clientId, event.date) ? 'Ver revisión' : 'Registrar revisión'}</button> : null}<button className="icon-button" aria-label="Descartar sesión" onClick={() => setDb(currentDb => ({ ...currentDb, activity: currentDb.activity?.map(item => item.id === event.id ? { ...item, status: 'dismissed' } : item) }))}><Icon name="close" /></button></article>)}</section> : null}
-        <section className="hero-panel">
+        {(db.activity ?? []).some(event => event.status === 'pending' && event.date === today) ? <section className={`panel activity-inbox ${showActivity ? 'is-open' : ''}`}><div className="panel-heading"><div><span className="section-kicker">COMPANION</span><h2>Actividad de tu PC</h2><p>Sesiones observadas; confirmá la revisión para completar el día.</p></div><button type="button" className="text-button" aria-expanded={showActivity} aria-controls="activity-records" onClick={() => setShowActivity(!showActivity)}>{showActivity ? 'Ocultar' : `Ver ${(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).length}`}<Icon name="chevron-right" size={15} /></button></div><div id="activity-records" hidden={!showActivity}>{(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).map(event => <article key={event.id}><div><strong>{clients.find(client => client.id === event.clientId)?.name ?? `Cuenta sin vincular: ${event.accountCandidate ?? 'sin ID'}`}</strong><p>{event.platform === 'meta_ads' ? 'Meta Ads' : 'Google Ads'} · {Math.floor(event.focusedMs / 60000)} min estimados · {event.navigationSignals} señales</p></div>{event.clientId ? <button className="secondary-button" onClick={() => openReview(event.clientId!, event.date)}>{findReview(event.clientId, event.date) ? 'Ver revisión' : 'Registrar revisión'}</button> : null}<button className="icon-button" aria-label="Descartar sesión" onClick={() => setDb(currentDb => ({ ...currentDb, activity: currentDb.activity?.map(item => item.id === event.id ? { ...item, status: 'dismissed' } : item) }))}><Icon name="close" /></button></article>)}</div></section> : null}
+        <div className="daily-overview"><section className="hero-panel">
           <div><span className="section-kicker">PROGRESO DEL DÍA</span><h2>{completion === 100 && active.length ? 'Jornada completa' : 'Seguimiento en curso'}</h2><p>{reviewsToday} de {active.length} clientes activos revisados.</p></div>
           <div className="progress-ring" style={{ '--progress': `${completion * 3.6}deg` } as React.CSSProperties}><span><b>{completion}%</b><small>completo</small></span></div>
         </section>
@@ -529,7 +530,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
           <article><span className="metric-icon success"><Icon name="check" /></span><div><small>Revisados hoy</small><strong>{reviewsToday}</strong><p>Con registro confirmado</p></div></article>
           <article><span className="metric-icon pending"><Icon name="clock" /></span><div><small>Por revisar</small><strong>{Math.max(0, active.length - reviewsToday)}</strong><p>Clientes activos restantes</p></div></article>
           <article><span className="metric-icon neutral"><Icon name="report" /></span><div><small>Pendientes abiertos</small><strong>{pending.length}</strong><p>Acciones para continuar</p></div></article>
-        </section>
+        </section></div>
 
         <div className="dashboard-grid">
           <section className="panel daily-list">
@@ -544,7 +545,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
               return <article key={clientItem.id} data-client-id={clientItem.id} className={`review-item ${expanded ? 'is-expanded' : ''}`}>
               <div className="review-row-header"><button className="review-row" aria-expanded={expanded} aria-controls={`rapid-${clientItem.id}`} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline')}>
                 <span className={`review-state ${reviewItem ? 'done' : ''}`}>{reviewItem ? <Icon name="check" /> : <span />}</span>
-                <span className="review-name"><strong>{clientItem.name}</strong><small>{reviewItem ? (describeReviewActions(reviewItem) || reviewItem.observations || 'Revisión registrada') : 'Todavía sin revisar'}</small></span>
+                <span className="review-name"><strong>{clientItem.name}</strong><small>{reviewItem ? `${storyDaysLabel([reviewItem]) ? `Historia → ${storyDaysLabel([reviewItem])} · ` : ''}${describeReviewActions(reviewItem) || reviewItem.observations || 'Revisión registrada'}` : 'Todavía sin revisar'}</small></span>
                 <span className={`state-pill ${reviewItem ? 'done' : ''}`}>{hasDraft ? 'Borrador' : reviewItem ? 'Revisado' : 'Pendiente'}</span>
                 <Icon name="chevron-right" />
               </button>
@@ -616,7 +617,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
 
         <NotebookReport store={db} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} preview />
       </div> : null}
-    </motion.main></AnimatePresence></div>
+    </NotebookPage></AnimatePresence></div>
 
     <footer className="site-footer screen"><a href="https://ian-pontorno-portfolio.vercel.app" target="_blank" rel="noopener noreferrer">© {new Date().getFullYear()} Ian Pontorno<span>Diseño y desarrollo</span><ExternalLink size={13} aria-hidden="true" /></a><a className="repository-link" href="https://github.com/Ian9Franco/INFORMES_FNG" target="_blank" rel="noopener noreferrer" aria-label="Ver el código de Informes FNG en GitHub"><svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.49c-2.23.48-2.7-.95-2.7-.95-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.22.82 1.22.82.71 1.22 1.87.87 2.33.67.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.58.82-2.14-.08-.2-.36-1.02.08-2.12 0 0 .67-.22 2.2.82A7.65 7.65 0 0 1 8 3.87c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.14 0 3.07-1.87 3.75-3.65 3.95.29.25.54.74.54 1.49v2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z" /></svg><span>GitHub</span></a></footer>
 

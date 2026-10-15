@@ -5,6 +5,11 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — mejoras continuas
 
 ### Interfaz operativa
+- Intercambio de páginas secuencial: salida completa antes de entrar, controles inertes durante salida y posición de lectura restaurada sin superponer contenido.
+- Resumen diario compacto y ancho de escritorio ampliado, filas móviles de una sola línea y eliminación de renglones repetidos/dobles separadores.
+- Bandeja de Companion plegable para mantener las revisiones a mano aun con muchas sesiones observadas.
+- Bordes y foco sin recortes, dropdown de historias en la capa superior nativa y respuestas elásticas squishy al hover/pulsar, respetando movimiento reducido.
+- Acción estable `meta.story.scheduled` («Programé historia») con cantidad y días destino lunes–domingo; guardado validado en Postgres, resumen en clientes e informes A4/PNG normal y detallado.
 - Registro rápido inline por cliente, «Sin cambios» en un toque con deshacer durante 8 segundos y filtros de pendientes/revisados.
 - Guardar fijo, «Guardar y siguiente» y Ctrl/⌘+Enter (Shift para siguiente); el modal detallado mantiene header/footer visibles sin recorrer todo el formulario.
 - Borradores locales por usuario/cliente/fecha, recuperables tras recarga y sin confirmar revisiones; bloqueo frente a una edición remota y carga explícita de la versión actual.

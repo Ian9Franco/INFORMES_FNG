@@ -1,8 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ACTION_TYPES, actionDefinition, describeReviewActions, validReviewActions } from '../src/review-actions.ts'
+import { ACTION_TYPES, actionDefinition, describeReviewActions, storyDaysLabel, validReviewActions } from '../src/review-actions.ts'
 
 const manual = { id: 'event-1', typeId: 'meta.ad.created', quantity: 3, source: 'manual', evidence: 'user_confirmed' }
+
+test('scheduled stories carry explicit unique weekdays and render in canonical order',()=>{
+  const story={...manual,typeId:'meta.story.scheduled',scheduledDays:['thu','mon']}
+  assert.equal(validReviewActions([story]),true)
+  for(const scheduledDays of [undefined,[],['bad'],['mon','mon'],[1]]) assert.equal(validReviewActions([{...story,scheduledDays}]),false)
+  assert.equal(validReviewActions([{...manual,scheduledDays:['mon']}]),false)
+  assert.match(describeReviewActions({actions:'',actionEntries:[story]}),/para lunes, jueves/)
+  assert.equal(storyDaysLabel([{actionEntries:[story]}]),'Lun · Jue')
+})
 
 test('catalog IDs are unique and distinguish identical labels across platforms', () => {
   assert.equal(new Set(ACTION_TYPES.map(item => item.id)).size, ACTION_TYPES.length)

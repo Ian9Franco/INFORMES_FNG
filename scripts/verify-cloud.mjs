@@ -2,11 +2,12 @@
 // Real database CAS/RLS/ingestion are separately tested in rolled-back SQL transactions.
 import { createRequire } from 'node:module'
 import assert from 'node:assert/strict'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 const require = createRequire(import.meta.url)
 const [url, modulePath, chrome, output] = process.argv.slice(2)
 const { chromium } = require(modulePath)
+const { PDFDocument } = require(path.join(path.dirname(modulePath),'pdf-lib'))
 const browser = await chromium.launch({ executablePath: chrome, headless: true })
 const uid = '00000000-0000-4000-8000-000000000111'
 const user = { id: uid, aud: 'authenticated', role: 'authenticated', email: 'qa@example.invalid', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString() }
@@ -75,12 +76,19 @@ async function review(page,name,note) {
   await page.getByRole('combobox').fill(name)
   await page.getByRole('combobox').press('Enter')
   await page.getByRole('dialog').getByLabel('Observaciones',{exact:true}).fill(note)
+  const field=await page.getByRole('dialog').getByLabel('Observaciones',{exact:true}).boundingBox()
+  const scrollBody=await page.locator('.review-modal-body').boundingBox()
+  assert.ok(field.x-scrollBody.x>=5&&scrollBody.x+scrollBody.width-field.x-field.width>=5,'Text field focus ring needs room on both sides')
   const bounds=await page.getByRole('dialog').getByRole('button',{name:'Guardar revisión',exact:true}).boundingBox()
   assert.ok(bounds.y>=0 && bounds.y+bounds.height<=await page.evaluate(()=>innerHeight),'Modal save remains visible after filling notes')
 }
 try {
   const pc=await device(), phone=await device()
+  await pc.page.setViewportSize({width:1920,height:1080})
   await phone.page.setViewportSize({width:390,height:844})
+  assert.ok((await pc.page.locator('.workspace').boundingBox()).width>1650,'Desktop must use the available width')
+  assert.ok((await pc.page.locator('.daily-overview').boundingBox()).height<160,'Daily overview should be compact')
+  assert.equal(await pc.page.locator('.review-list').evaluate(element=>getComputedStyle(element).backgroundImage),'none','No repeated lines behind client rows')
   await pc.page.getByRole('button',{name:'Revisado sin cambios: ALLEGRA',exact:true}).click()
   await phone.page.waitForFunction(()=>document.querySelector('.metrics-grid strong')?.textContent==='1')
   await pc.page.getByRole('button',{name:'Deshacer',exact:true}).click()
@@ -95,10 +103,19 @@ try {
   const after=await tagPosition()
   assert.ok(Math.abs(before.x-after.x)<1 && Math.abs(before.y-after.y)<1,'Tags must keep their position when selected')
   await pc.page.getByLabel('Cantidad: Añadí anuncios',{exact:true}).fill('2')
+  await pc.page.locator('.available-action-tags button[data-action-type-id="meta.story.scheduled"]').click()
+  await pc.page.locator('.story-day-trigger').click()
+  const dayPicker=pc.page.getByRole('dialog',{name:'Días de la historia programada',exact:true})
+  await dayPicker.waitFor()
+  for(const day of ['lunes','jueves']) if(await dayPicker.getByRole('checkbox',{name:day,exact:true}).getAttribute('aria-checked')!=='true') await dayPicker.getByRole('checkbox',{name:day,exact:true}).click()
+  for(const day of ['martes','miércoles','viernes','sábado','domingo']) if(await dayPicker.getByRole('checkbox',{name:day,exact:true}).getAttribute('aria-checked')==='true') await dayPicker.getByRole('checkbox',{name:day,exact:true}).click()
+  await pc.page.keyboard.press('Escape')
+  await dayPicker.waitFor({state:'hidden'})
   assert.equal(writes,0,'Draft changes must not write confirmed records')
   await pc.page.reload()
   await pc.page.getByRole('button',{name:'Registrar acciones: JONDE',exact:true}).click()
   assert.equal(await pc.page.getByLabel('Cantidad: Añadí anuncios',{exact:true}).inputValue(),'2')
+  assert.match(await pc.page.locator('.story-day-trigger').textContent(),/Lun · Jue/)
   assert.equal(await pc.page.locator('.metrics-grid strong').first().textContent(),'0')
   await pc.page.getByRole('button',{name:'Cerrar registro: JONDE',exact:true}).click()
   console.log('One-tap review/undo sync, stable tags and reload-safe unconfirmed draft passed')
@@ -107,6 +124,7 @@ try {
   await pc.page.getByRole('dialog').waitFor({state:'detached'})
   await phone.page.waitForFunction(()=>document.querySelector('.metrics-grid strong')?.textContent==='1')
   assert.equal(writes,1,'Only one changed record should be sent; receiving device must not echo it')
+  assert.match(await phone.page.locator('.review-row').filter({hasText:'JONDE'}).textContent(),/Historia → Lun · Jue/)
   console.log('PC → Realtime → mobile progress; no echo and one-record write passed')
 
   await pc.page.locator('.review-row').filter({hasText:'JONDE'}).click()
@@ -115,6 +133,14 @@ try {
   await phone.page.locator('.review-row').filter({hasText:'JONDE'}).click()
   await phone.page.getByRole('button',{name:'Edición detallada',exact:false}).click()
   await phone.page.getByRole('dialog').waitFor()
+  await phone.page.locator('dialog.review-modal').locator('.story-day-trigger').click()
+  const mobilePicker=phone.page.getByRole('dialog',{name:'Días de la historia programada',exact:true})
+  await mobilePicker.waitFor()
+  const pickerBounds=await mobilePicker.boundingBox()
+  assert.ok(pickerBounds.x>=0&&pickerBounds.x+pickerBounds.width<=390&&pickerBounds.y>=0&&pickerBounds.y+pickerBounds.height<=844,'Story picker must not be clipped in a mobile modal')
+  await phone.page.keyboard.press('Escape')
+  await mobilePicker.waitFor({state:'hidden'})
+  assert.equal(await phone.page.locator('dialog.review-modal[open]').count(),1,'Escape closes only the dropdown, not the review')
   await pc.page.getByRole('dialog').getByLabel('Observaciones',{exact:true}).fill('PC actualizó la revisión')
   await pc.page.getByRole('button',{name:'Guardar revisión',exact:true}).click()
   await phone.page.waitForFunction(()=>JSON.parse(localStorage.getItem('fng-cache:00000000-0000-4000-8000-000000000111')).reviews[0]?.revision===2)
@@ -168,7 +194,56 @@ try {
   await phone.page.locator('.daily-filter').getByRole('button',{name:'Todos',exact:true}).click()
   console.log('Mobile fixed save, save-and-next, platform memory, pending task and keyboard shortcut passed')
 
+  for(let index=0;index<35;index++) {
+    const id=`visual-client-${index}`,row=make('client',id,{id,name:index===0?'CARROCERÍAS CULPINA · CUENTA CON NOMBRE LARGO':`CLIENTE DE PRUEBA ${String(index+1).padStart(2,'0')}`,active:true})
+    rows.set(key(row),row);broadcast(row)
+  }
+  await phone.page.waitForFunction(()=>document.querySelectorAll('.review-item').length===39)
+  await pc.page.getByRole('button',{name:'Activar tema oscuro',exact:true}).click()
+  await phone.page.getByRole('button',{name:'Activar tema oscuro',exact:true}).click()
+  for(const page of [pc.page,phone.page]) await page.waitForFunction(()=>getComputedStyle(document.querySelector('.search-box input')).backgroundColor==='rgb(45, 53, 48)')
+  await pc.page.evaluate(()=>scrollTo({top:0,behavior:'instant'}))
+  await phone.page.evaluate(()=>scrollTo({top:0,behavior:'instant'}))
+  await pc.page.screenshot({path:path.join(output,'desktop-compact-dark.png'),fullPage:false})
+  await phone.page.screenshot({path:path.join(output,'mobile-compact-dark.png'),fullPage:false})
+  for(const width of [320,390,768]) {
+    await phone.page.setViewportSize({width,height:844})
+    assert.equal(await phone.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`No horizontal clipping at ${width}px`)
+    const rowHeight=(await phone.page.locator('.review-item').first().boundingBox()).height
+    if(width<600) assert.ok(rowHeight<=84,'Mobile client rows should fit on one compact line')
+  }
+  await phone.page.setViewportSize({width:390,height:844})
+
+  await pc.page.evaluate(()=>{
+    window.pageFrames=[];window.samplePages=true
+    const sample=()=>{if(!window.samplePages)return;const pages=[...document.querySelectorAll('.notebook-page')];window.pageFrames.push({count:pages.length,opacity:pages.map(page=>Number(getComputedStyle(page).opacity)),inert:pages.some(page=>page.inert)});requestAnimationFrame(sample)};sample()
+  })
   await pc.page.getByRole('navigation',{name:'Navegación principal'}).getByRole('button',{name:'Informes',exact:true}).click()
+  await pc.page.getByRole('heading',{name:'Informes',exact:true}).waitFor()
+  await pc.page.waitForFunction(()=>{const element=document.querySelector('.notebook-page[data-page="informes"]');if(!element)return false;const style=getComputedStyle(element);return Number(style.opacity)>.999&&(style.transform==='none'||style.transform==='matrix(1, 0, 0, 1, 0, 0)')})
+  const frames=await pc.page.evaluate(()=>{window.samplePages=false;return window.pageFrames})
+  assert.equal(Math.max(...frames.map(frame=>frame.count)),1,'Only one page may be mounted during navigation')
+  assert.ok(frames.some(frame=>frame.opacity.some(opacity=>opacity>0&&opacity<.99)),'Page change must animate rather than swap instantly')
+  assert.ok(frames.some(frame=>frame.inert),'Exiting page must not accept clicks')
+  await mkdir(output,{recursive:true})
+  for(const [label,suffix] of [['Planilla semanal','normal'],['Informe detallado','detallado']]) {
+    await pc.page.getByRole('button',{name:label,exact:false}).click()
+    if(suffix==='normal') assert.match(await pc.page.locator('.print-paper .story-cell-note').first().textContent(),/Lun · Jue/)
+    else assert.match(await pc.page.locator('.print-paper .report-content').textContent(),/para lunes, jueves/)
+    const pendingDownload=pc.page.waitForEvent('download')
+    await pc.page.getByRole('button',{name:'Descargar PNG',exact:true}).click()
+    const download=await pendingDownload;const pngFile=path.join(output,`historias-${suffix}.png`);await download.saveAs(pngFile)
+    const png=await readFile(pngFile);assert.ok(png.readUInt32BE(16)>=2475&&png.readUInt32BE(20)>=3500)
+    const pdf=await pc.page.pdf({path:path.join(output,`historias-${suffix}.pdf`),preferCSSPageSize:true,printBackground:true})
+    assert.equal((await PDFDocument.load(pdf)).getPageCount(),1,'Reports with story days must remain one A4 page')
+  }
+  console.log('Wide compact layout, story days, unclipped mobile dropdown, sequential page animation and A4/PNG reports passed')
+  await pc.page.emulateMedia({reducedMotion:'reduce'})
+  await pc.page.getByRole('navigation',{name:'Navegación principal'}).getByRole('button',{name:'Clientes',exact:true}).click()
+  await pc.page.getByRole('heading',{name:'Clientes',exact:true}).waitFor()
+  assert.equal(await pc.page.locator('.notebook-page').count(),1)
+  await pc.page.getByRole('navigation',{name:'Navegación principal'}).getByRole('button',{name:'Informes',exact:true}).click()
+  await pc.page.getByRole('heading',{name:'Informes',exact:true}).waitFor()
   await pc.page.getByRole('button',{name:'Histórico mensual',exact:true}).waitFor()
   await pc.page.getByRole('button',{name:'Histórico mensual',exact:true}).click()
   await pc.page.getByLabel('Mes',{exact:true}).fill('2026-01')
