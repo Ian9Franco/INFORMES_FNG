@@ -4,7 +4,7 @@
 
 1. Recargar la web en PC y móvil para usar la nueva versión.
 2. Ingresar con el **mismo correo** en ambos dispositivos. Se admite magic link o contraseña de Supabase.
-3. Abrir primero el dispositivo donde están los registros previos. La primera cuenta importa sus datos locales; si otro dispositivo ya inicializó la nube, usar **Unir registros de este dispositivo**. La unión añade revisiones faltantes sin reemplazar las existentes.
+3. Si el dispositivo tiene registros locales anteriores, usar **Unir registros de este dispositivo**. La unión añade revisiones faltantes sin reemplazar las existentes, pero sólo para clientes ya administrados en la DB; no hay importación automática del catálogo.
 4. Guardar una revisión y esperar **DB activa** en la cabecera. El menú de cuenta explica el estado y permite actualizar manualmente. El otro dispositivo recibe el cambio. Al volver a primer plano recupera el período visible.
 5. En Informes seleccionar **Histórico mensual** y el mes. La planilla mensual muestra revisiones/acciones/última fecha por cliente; el detalle conserva notas y acciones.
 
@@ -32,6 +32,14 @@ Las migraciones antiguas `workspaces` se conservan como respaldo. Los snapshots 
 La metadata de tareas resueltas/cierres todavía se carga completa. Para volúmenes mayores se puede paginar/archivar esos históricos. No se implementó retención destructiva de sesiones ni revisiones.
 
 ## Companion
+
+### Catálogo privado y alcance de navegación
+
+Los clientes, cuentas Meta/Google y contextos confirmados se administran exclusivamente en Supabase. No hay seed ni IDs reales en el bundle. Ver [administración paso a paso](ADMINISTRAR_CLIENTES.md). Informes sólo permite archivar/reactivar; las mismas restricciones se aplican en la DB. Backups y unión de registros no añaden ni eliminan clientes.
+
+Companion obtiene su catálogo mediante `fng_companion_catalog()`, con Auth/RLS, caché privada por usuario de una hora y renovación manual. No consulta por navegación ni conserva la caché al desconectar. Google se vincula por su Customer ID real o un par de contexto confirmado en DB; Meta por `act` o una página/perfil confirmado. Los IDs de usuario, negocio, campaña y redirección se descartan. Sólo se admiten rutas Ads y calendario/compositor explícitos de Meta, nunca navegación general.
+
+Las pruebas usan identificadores ficticios. El historial Git anterior queda pendiente de saneamiento y no fue reescrito.
 
 Actualizar la extensión desde el repositorio Companion: `npm install`, `npm run build`, recargar `dist` en Chrome. En su panel ingresar correo y contraseña de la misma cuenta. Si la web usa magic link, **Contraseña de mi cuenta** en la barra superior o **Clientes → Conectar Companion** permiten elegir y confirmar una contraseña (mínimo 12 caracteres). No se genera una contraseña automática ni se envía por correo.
 

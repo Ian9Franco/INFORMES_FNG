@@ -5,6 +5,9 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — mejoras continuas
 
 ### Interfaz operativa
+- Catálogo privado en Supabase: se retiran IDs reales del código/fixtures/documentación y los seeds automáticos. Sólo archivar/reactivar desde Informes; alta/baja, nombres, cuentas y contextos exclusivos de administración DB, también protegidos en la API.
+- RPC privada para el catálogo de Companion, RLS por usuario, contextos confirmados y caché local de una hora; sin búsquedas remotas por URL ni nuevas cuentas desde respaldos. Guía `docs/ADMINISTRAR_CLIENTES.md`; historial Git anterior pendiente por pedido explícito.
+- Importación administrativa privada de 17 cuentas Google Ads, conservando clientes existentes, archivos e historial; IDs de texto sin guiones y presentación `000-000-0000`. Etiquetas Meta/Google Ads según la plataforma, sin seed ni polling del catálogo en la web.
 - Ambos formatos, semanales y mensuales, excluyen clientes archivados/eliminados de hojas, revisiones, pendientes y contadores; el historial almacenado no se borra y vuelve al reactivar el cliente.
 - PDF/PNG con nombres que distinguen formato simple/detallado y período semanal/mensual; el título de la app se restaura al cerrar el diálogo de impresión.
 - Formatos «Simple» y «Detallado», independientes del período, con descripción mensual correcta y transición squishy secuencial sin superponer hojas ni alterar la paginación física.

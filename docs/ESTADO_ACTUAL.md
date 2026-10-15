@@ -1,9 +1,29 @@
 # Estado actual — Informes FNG
 
-**Corte documental:** 2026-10-14.
+**Corte documental vigente:** 2026-10-15.
 **Repositorio:** [Ian9Franco/INFORMES_FNG](https://github.com/Ian9Franco/INFORMES_FNG)  
 **Implementación actual:** rama `main`; el [PR fundacional #1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1) ya fue fusionado.
-**Madurez:** MVP técnico / prototipo funcional, **no validado para producción**.
+**Madurez:** MVP personal en desarrollo. Las pruebas automatizadas no sustituyen la validación humana de producción/dispositivos físicos.
+
+## Estado vigente — 15 de octubre
+
+Esta sección y las guías [Sincronización v1](SINCRONIZACION_V1.md), [Registro rápido](REGISTRO_RAPIDO.md) y [Administración de clientes](ADMINISTRAR_CLIENTES.md) reemplazan el inventario inicial conservado más abajo.
+
+- **Clientes:** catálogo privado de Supabase, orden alfabético, cuentas independientes Meta/Google y etiquetas según plataforma. Sólo archivar/reactivar desde Informes; alta/baja, renombres y cambios de cuentas exclusivamente desde la DB, también protegidos en la API. Backups/unión local no crean clientes.
+- **Persistencia:** `fng_records` por entidad, versiones, lotes atómicos tras 350 ms, Realtime por usuario, cola durable, conflictos explícitos y caché del período visible. Históricos por rango, paginados; no se reescriben snapshots completos. `workspaces` conserva el respaldo anterior.
+- **Auth:** magic link o contraseña elegida por el usuario, sesión persistente y refresh token. No hay contraseña generada automáticamente.
+- **Registro:** acciones Meta/Google con cantidades, historias/publicaciones con días destino, acciones personalizadas generales o por cliente, guardar/siguiente, borradores y deshacer.
+- **Informes:** semanales o mensuales; Simple/Detallado, título personalizable, PDF mediante impresión y PNG. Simple en una hoja; detallado en dos columnas y hojas numeradas si hace falta. Ambos excluyen archivados/eliminados sin borrar su historial.
+- **UI/PWA:** temas claro/oscuro, navegación móvil flotante, transiciones secuenciales y movimiento reducido. Manifest y receptor Service Worker; todavía sin suscripciones/envío Web Push ni programador de recordatorios.
+- **Companion:** login y envío deduplicado de sesiones observadas; nunca confirma acciones reales. Catálogo privado vía RPC/Auth/RLS, caché por usuario de una hora y renovación manual, sin consulta por cada URL. Sólo rutas Ads y calendario/compositor Meta permitidos; sin URLs completas, historial, permiso global `tabs` ni scripts de contenido.
+- **Verificación local:** TypeScript/build aprobados en ambos repos; 38 pruebas de Informes (incluido PostgreSQL aislado) y 17 de Companion. Navegadores simulados verifican sincronización PC/móvil, offline/conflictos, registro rápido, archivo/reactivación, informes y etiquetas Meta/Google sin escrituras automáticas del catálogo.
+- **Supabase real:** migración privada aplicada, RLS y permisos verificados, sin crear cuentas Auth de prueba ni modificar revisiones operativas. El advisor conserva el aviso de Auth [Leaked Password Protection Disabled](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection); no se cambió esa configuración.
+
+Pendientes: prueba humana de Companion/contextos de cada cliente y dispositivos físicos, impresión real, Web Push, auditoría inmutable/backups automáticos y escalado de metadata histórica. El saneamiento del historial Git anterior queda pendiente por pedido explícito; no se reescribió historial ni se hizo force-push. Quitar IDs del código actual no los borra de commits/despliegues anteriores.
+
+## Archivo documental inicial (13–14 de octubre, no vigente)
+
+El texto siguiente conserva el diagnóstico previo a la sincronización por entidad y al catálogo privado. Sus referencias a seed, alta/baja desde UI, snapshots, falta de pruebas y funciones futuras **no describen la implementación actual**.
 
 ## Propósito del producto
 

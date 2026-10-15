@@ -8,8 +8,8 @@ import ClientPicker from './components/ClientPicker'
 import NotebookReport from './components/NotebookReport'
 import ReportPreview from './components/ReportPreview'
 import { activeReportStore, reportFileName } from './report-export'
-import { reconcileAccounts } from './account-catalog'
-import { newClient, sortClients } from './clients'
+import { formatAccountId } from './account-catalog'
+import { sortClients, withManagedClients } from './clients'
 import { ExternalLink } from 'lucide-react'
 import { monthBounds, samePayload } from './sync/records'
 import CompanionAccess from './components/CompanionAccess'
@@ -87,7 +87,7 @@ function EmptyState({ icon, title, text }: { icon: IconName; title: string; text
 }
 
 export default function App({ initialData, onChange, storageMode = 'local', userId, onPeriodChange, onExport, onImport, headerTools, readOnly = false }: { readOnly?: boolean; headerTools?: React.ReactNode; initialData?: Store; onChange?: (data: Store) => void; storageMode?: 'local' | 'cloud'; userId?: string; onPeriodChange?: (start: string, end: string) => void; onExport?: () => Promise<Store>; onImport?: (store: Store) => Promise<void> }) {
-  const [db, setDbState] = useState<Store>(() => { const store = reconcileAccounts(initialData ?? load()); return { ...store, clients: sortClients(store.clients) } })
+  const [db, setDbState] = useState<Store>(() => { const store = initialData ?? load(); return { ...store, clients: sortClients(store.clients) } })
   const { confirm, confirmation } = useConfirmation()
   const dbRef = useRef(db)
   dbRef.current = db
@@ -118,9 +118,6 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const calm = useReducedMotion()
   const [observations, setObservations] = useState('')
   const [pendingText, setPendingText] = useState('')
-  const [newName, setNewName] = useState('')
-  const [newAccountId, setNewAccountId] = useState('')
-  const [newClientError, setNewClientError] = useState('')
   const [clientSearch, setClientSearch] = useState('')
   const [clientFilter, setClientFilter] = useState<ClientFilter>('activos')
   const [printMode, setPrintMode] = useState<PrintMode>('grilla')
@@ -423,19 +420,6 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     setNotice('Pendiente completado')
   }
 
-  function addClient(event: React.FormEvent) {
-    event.preventDefault()
-    try {
-      const client = newClient(db.clients, newName, newAccountId)
-      setDb(currentDb => ({ ...currentDb, clients: sortClients([...currentDb.clients, client]) }))
-      setNewName('')
-      setNewAccountId('')
-      setNewClientError('')
-      setNotice('Cliente agregado con su cuenta publicitaria')
-    } catch (error) {
-      setNewClientError(error instanceof Error ? error.message : 'No se pudo agregar el cliente.')
-    }
-  }
 
   function toggleClient(clientItem: Client) {
     setDb(currentDb => ({
@@ -445,17 +429,6 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     setNotice(clientItem.active ? 'Cliente archivado' : 'Cliente reactivado')
   }
 
-  async function deleteClient(clientItem: Client) {
-    const hasHistory = db.reviews.some(item => item.clientId === clientItem.id) || db.pending.some(item => item.clientId === clientItem.id) || db.customActions?.some(item => item.clientId === clientItem.id)
-    if (hasHistory) {
-      setError('Este cliente tiene historial o acciones propias. Podés archivarlo para conservar sus datos.')
-      return
-    }
-    if (!await confirm({ title: '¿Eliminar cliente?', message: `${clientItem.name} se eliminará definitivamente. Podés archivarlo si preferís conservarlo.`, accept: 'Eliminar cliente', danger: true })) return
-    if (dbRef.current.reviews.some(item => item.clientId === clientItem.id) || dbRef.current.pending.some(item => item.clientId === clientItem.id) || dbRef.current.customActions?.some(item => item.clientId === clientItem.id)) { setError('Este cliente ahora tiene historial o acciones propias. Archivá en lugar de eliminar.'); return }
-    setDb(currentDb => ({ ...currentDb, clients: currentDb.clients.filter(item => item.id !== clientItem.id) }))
-    setNotice('Cliente eliminado')
-  }
 
   function changeWeek(amount: number) {
     const next = date(week)
@@ -519,8 +492,8 @@ export default function App({ initialData, onChange, storageMode = 'local', user
       if (!value || typeof value !== 'object' || !('clients' in value) || !('reviews' in value) || !('pending' in value) || !('closed' in value) || !Array.isArray(value.clients) || !Array.isArray(value.reviews) || !Array.isArray(value.pending) || !Array.isArray(value.closed)) throw Error('Formato inválido')
       if ('customActions' in value && (!Array.isArray(value.customActions) || !value.customActions.every(validCustomAction))) throw Error('Catálogo inválido')
       if (value.reviews.some(item => !item || typeof item !== 'object' || ('actionEntries' in item && (!validReviewActions(item.actionEntries) || item.actionSchemaVersion !== ACTION_SCHEMA_VERSION)))) throw Error('Acciones inválidas')
-      if (await confirm({ title: '¿Restaurar respaldo?', message: 'Se reemplazarán todos tus datos por este archivo. Descargá una copia actual antes de continuar.', accept: 'Reemplazar datos', danger: true })) {
-        const store = reconcileAccounts(value as Store)
+      if (await confirm({ title: '¿Restaurar respaldo?', message: 'Se restaurarán los registros operativos. El catálogo de clientes y cuentas se conserva desde la base de datos. Descargá una copia actual antes de continuar.', accept: 'Restaurar registros', danger: true })) {
+        const store = withManagedClients(dbRef.current, value as Store)
         // Old backups must not tombstone immutable definitions or orphan their clients.
         const catalog = new Map((dbRef.current.customActions ?? []).map(item => [item.id, item]))
         for (const definition of store.customActions ?? []) {
@@ -530,7 +503,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
         store.customActions = [...catalog.values()]
         for (const definition of store.customActions) if (definition.clientId && !store.clients.some(item => item.id === definition.clientId)) {
           const client = dbRef.current.clients.find(item => item.id === definition.clientId)
-          if (client) store.clients.push({ ...client, active: false })
+          if (client) continue
           else throw Error('Cliente de acción inexistente')
         }
         if (onImport) await onImport(store)
@@ -640,14 +613,14 @@ export default function App({ initialData, onChange, storageMode = 'local', user
           const reviewItem = findReview(clientItem.id, day)
           return <td key={day}><button disabled={closed} className={reviewItem ? 'reviewed' : ''} onClick={() => openReview(clientItem.id, day)} aria-label={`Revisión de ${clientItem.name} para ${day}`}>{reviewItem ? <Icon name="check" /> : <Icon name="plus" size={15} />}</button></td>
         })}</tr>)}</tbody></table></div>
-        {!active.length ? <EmptyState icon="users" title="No hay clientes activos" text="Reactivá o agregá un cliente para completar la semana." /> : null}
+        {!active.length ? <EmptyState icon="users" title="No hay clientes activos" text="Reactivá un cliente archivado o administrá el catálogo desde la base de datos." /> : null}
         <div className="panel-footer"><p><span className="legend-dot reviewed" />Revisado <span className="legend-dot" />Sin revisar</p><div><button className="secondary-button" onClick={toggleWeekClosed}><Icon name={closed ? 'unlock' : 'lock'} />{closed ? 'Reabrir semana' : 'Cerrar semana'}</button><button className="primary-button" onClick={() => { setPrintMode('grilla'); navigate('informes') }}><Icon name="print" />Preparar informe</button></div></div>
       </section> : null}
 
       {tab === 'clientes' ? <>
         {storageMode === 'cloud' ? <CompanionAccess /> : null}
         <section className="panel client-toolbar">
-          <form className="add-client" onSubmit={addClient}><span className="field-label">Nuevo cliente</span><div className="new-client-fields"><label htmlFor="new-client">Nombre<input id="new-client" value={newName} onChange={event => { setNewName(event.target.value); setNewClientError('') }} placeholder="Nombre de la empresa" required maxLength={120} /></label><label htmlFor="new-account-id">ID de cuenta publicitaria (Meta)<input id="new-account-id" type="text" inputMode="numeric" value={newAccountId} onChange={event => { setNewAccountId(event.target.value); setNewClientError('') }} placeholder="Ej.: 2980180415592669" required maxLength={30} aria-describedby="new-client-help" aria-invalid={Boolean(newClientError)} /></label><button className="primary-button" type="submit" disabled={!newName.trim() || !newAccountId.trim()}><Icon name="plus" />Agregar cliente</button></div><p className="new-client-help" id="new-client-help">Copiá el ID de la cuenta en Meta. Se usará para identificar al cliente desde Companion.</p>{newClientError ? <p className="new-client-error" role="alert">{newClientError}</p> : null}</form>
+          <div><span className="section-kicker">CATÁLOGO ADMINISTRADO</span><p className="helper-text">Los clientes y sus cuentas se añaden, modifican o eliminan únicamente desde la base de datos. Acá podés archivarlos o reactivarlos sin perder su historial.</p></div>
           <div className="backup-actions"><span>Respaldo de datos</span><div><button className="secondary-button" onClick={exportBackup}><Icon name="download" />Exportar</button><label className="secondary-button file-button"><Icon name="upload" />Importar<input type="file" accept=".json,application/json" onChange={event => { const file = event.target.files?.[0]; if (file) importBackup(file); event.target.value = '' }} /></label></div></div>
         </section>
 
@@ -658,10 +631,10 @@ export default function App({ initialData, onChange, storageMode = 'local', user
             const reviewCount = db.reviews.filter(item => item.clientId === clientItem.id).length
             const pendingCount = db.pending.filter(item => item.clientId === clientItem.id && !item.resolved).length
             return <article key={clientItem.id} className="client-management-row">
-              <div className="client-identity"><span className="client-avatar large">{clientItem.name.slice(0, 2)}</span><div><strong>{clientItem.name}</strong>{clientItem.advertisingAccounts?.length ? clientItem.advertisingAccounts.map(account => <small key={account.accountId} className="account-binding"><span>{account.owner}</span><button type="button" title="Copiar ID de cuenta publicitaria" onClick={() => { navigator.clipboard.writeText(account.accountId).then(() => setNotice('ID de cuenta copiado')).catch(() => setError('No se pudo copiar el ID.')) }}>Meta · {account.accountId}</button></small>) : <small>Sin cuenta publicitaria vinculada</small>}</div></div>
+              <div className="client-identity"><span className="client-avatar large">{clientItem.name.slice(0, 2)}</span><div><strong>{clientItem.name}</strong>{clientItem.advertisingAccounts?.length ? clientItem.advertisingAccounts.map(account => <small key={`${account.platform}:${account.accountId}`} className="account-binding"><span>{account.owner}</span><button type="button" title="Copiar ID de cuenta publicitaria" onClick={() => { navigator.clipboard.writeText(account.accountId).then(() => setNotice('ID de cuenta copiado')).catch(() => setError('No se pudo copiar el ID.')) }}>{account.platform === 'google_ads' ? 'Google Ads' : 'Meta'} · {formatAccountId(account)}</button></small>) : <small>Sin cuenta publicitaria vinculada</small>}</div></div>
               <div className="client-stats"><span><b>{reviewCount}</b> revisiones</span><span><b>{pendingCount}</b> pendientes</span></div>
               <span className={`state-pill ${clientItem.active ? 'done' : 'archived'}`}>{clientItem.active ? 'Activo' : 'Archivado'}</span>
-              <div className="row-actions"><button className="icon-button" onClick={() => toggleClient(clientItem)} title={clientItem.active ? 'Archivar' : 'Reactivar'} aria-label={clientItem.active ? `Archivar ${clientItem.name}` : `Reactivar ${clientItem.name}`}><Icon name="archive" /></button><button className="icon-button danger-icon" onClick={() => deleteClient(clientItem)} title="Eliminar" aria-label={`Eliminar ${clientItem.name}`}><Icon name="trash" /></button></div>
+              <div className="row-actions"><button className="icon-button" onClick={() => toggleClient(clientItem)} title={clientItem.active ? 'Archivar' : 'Reactivar'} aria-label={clientItem.active ? `Archivar ${clientItem.name}` : `Reactivar ${clientItem.name}`}><Icon name="archive" /></button></div>
             </article>
           })}</div> : <EmptyState icon="search" title="Sin resultados" text="Probá otro nombre o cambiá el filtro seleccionado." />}
         </section>

@@ -1,6 +1,6 @@
 # Informes FNG
 
-Aplicación de seguimiento **personal** de trabajo en Meta Ads para Fanger Design. Permite registrar revisiones por cliente y día, describir cambios u observaciones, gestionar pendientes y emitir la planilla semanal que se entrega los lunes.
+Aplicación de seguimiento **personal** de trabajo en Meta Ads y Google Ads para Fanger Design. Permite registrar revisiones por cliente y día, describir cambios u observaciones, gestionar pendientes y emitir informes semanales o mensuales.
 
 **Estado:** MVP en desarrollo sobre `main`. El PR fundacional [#1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1) ya fue integrado. La interfaz operativa está disponible, pero **todavía no se considera lista para producción** hasta completar las validaciones de datos, Auth/RLS e impresión. Consultar [estado actual](docs/ESTADO_ACTUAL.md) y [limitaciones](#limitaciones-y-riesgos).
 
@@ -9,6 +9,7 @@ Aplicación de seguimiento **personal** de trabajo en Meta Ads para Fanger Desig
 | Documento | Para qué sirve |
 | --- | --- |
 | [Estado actual](docs/ESTADO_ACTUAL.md) | Inventario verificable de lo implementado, lo parcial y lo que falta |
+| [Administrar clientes](docs/ADMINISTRAR_CLIENTES.md) | Altas/bajas y cuentas exclusivamente desde Supabase; privacidad y contextos de Companion |
 | [Changelog](CHANGELOG.md) | Evolución y cambios ya introducidos |
 | [Backlog](docs/BACKLOG.md) | Tareas priorizadas con criterios de aceptación |
 | [Roadmap](docs/ROADMAP.md) | Etapas de desarrollo, dependencias y condiciones para avanzar |
@@ -19,11 +20,11 @@ Aplicación de seguimiento **personal** de trabajo en Meta Ads para Fanger Desig
 | --- | --- |
 | Aplicación web | Next.js 15, App Router, React 19, TypeScript |
 | Estilos | CSS propio en `src/styles.css`, incluido `@media print` |
-| Autenticación | Supabase Auth: correo y enlace de acceso (OTP/magic link) |
+| Autenticación | Supabase Auth: contraseña o enlace de acceso (OTP/magic link), sesión persistente |
 | Persistencia remota | Supabase PostgreSQL, `fng_records` por entidad y `fng_ad_accounts`; Auth + RLS + Realtime |
 | Autorización | Row Level Security (RLS) por `auth.uid()` |
 | Persistencia adicional | `localStorage` y respaldo JSON importable/exportable |
-| PWA | Manifest e íconos; **sin service worker**, offline ni push |
+| PWA | Manifest, íconos y receptor Service Worker; caché de datos del período y cola local, sin envío Web Push todavía |
 | Calidad | GitHub Actions ejecuta `npm install` + `npm run build` |
 
 **Importante:** No usa Vite, Tailwind, shadcn/ui, `@supabase/ssr` ni API de Meta Ads en esta versión. Aunque use App Router, el acceso a datos y la autenticación están implementados **del lado cliente**, no mediante cookies/SSR en servidor.
@@ -32,7 +33,7 @@ Aplicación de seguimiento **personal** de trabajo en Meta Ads para Fanger Desig
 
 - Node.js **22** recomendado (es la versión configurada en CI).
 - npm.
-- Un proyecto Supabase con Auth y la migración de `workspaces` aplicada.
+- Un proyecto Supabase con Auth y todas las migraciones versionadas aplicadas; catálogo administrado desde la DB.
 - Correo con acceso a enlaces de confirmación; el proveedor y las URL de redirección de Auth deben estar configurados.
 
 ```bash
@@ -65,7 +66,7 @@ En **Supabase Dashboard → Authentication → URL Configuration**, configurar e
 | `npm start` | Sirve la compilación de producción |
 | `npm run lint` | **Solo** ejecuta `tsc --noEmit`. No ejecuta ESLint |
 
-`npm test` verifica contratos, sincronización y migraciones en PostgreSQL aislado. Los scripts `verify-notebook.mjs` y `verify-cloud.mjs` comprueban la UI y dos navegadores con backend simulado. El lockfile está versionado.
+`npm test` verifica contratos, administración de catálogo, ausencia de IDs en el frontend y migraciones en PostgreSQL aislado. Los scripts `verify-private-catalog.mjs` y `verify-cloud.mjs` comprueban la UI y dos navegadores con backend simulado e IDs ficticios. El lockfile está versionado.
 
 ## Base de datos y seguridad
 
@@ -93,16 +94,16 @@ type Store = {
 }
 ```
 
-La aplicación carga los datos de Supabase después del inicio de sesión. **Si no existe un workspace remoto**, importa una copia previa de `localStorage` o carga el catálogo inicial de 27 clientes. Cada cambio persiste el estado completo en `localStorage` y dispara un `upsert` del JSON remoto. El guardado se encadena dentro de una pestaña, pero **no existe control de versiones, transacciones por entidad ni resolución de conflictos entre dispositivos**: puede sobrescribirse información con una copia vieja.
+La aplicación carga metadata y registros del período visible después del inicio de sesión. Guarda sólo las entidades modificadas, agrupadas tras 350 ms, con versiones, transacciones y resolución explícita de conflictos. Realtime comunica cambios entre dispositivos; la cola local conserva los cambios pendientes. No genera clientes ni escribe un catálogo inicial al abrir una cuenta vacía.
 
-La importación desde JSON requiere confirmación y reemplaza el estado completo. La validación estructural es básica; evitá importar archivos no confiables. Las observaciones y acciones podrían contener información de clientes; no deben considerarse protegidas por cifrado local ni listas para colaboración empresarial.
+La importación desde JSON requiere confirmación y restaura registros operativos, conservando el catálogo de clientes/cuentas de la DB. No importa referencias a clientes inexistentes. La validación estructural no convierte archivos desconocidos en confiables. Las observaciones y acciones podrían contener información de clientes; no están protegidas por cifrado local independiente ni listas para colaboración empresarial.
 
 ## Recorrido funcional
 
 1. **Mi jornada:** muestra progreso, clientes activos revisados/no revisados hoy y pendientes abiertos.
 2. **Semana:** matriz de lunes a sábado. Cada cliente puede tener **una revisión por fecha**, con campos de acciones y observaciones.
-3. **Clientes:** búsqueda, filtros, alta, archivo/reactivación y eliminación definitiva solo cuando no existe historial; exportación/importación JSON.
-4. **Informes:** selección de semana, vista previa y formato **grilla A4 vertical** o **informe detallado**. El diálogo del navegador permite imprimir o guardar como PDF.
+3. **Clientes:** búsqueda y filtros, archivo/reactivación y exportación/importación JSON. Altas, bajas y cambios de cuentas sólo desde Supabase, siguiendo [la guía](docs/ADMINISTRAR_CLIENTES.md).
+4. **Informes:** período semanal o histórico mensual; formatos **Simple** y **Detallado**, vista previa A4, PNG e impresión/guardado PDF. Los informes excluyen clientes archivados y eliminados.
 5. **Lunes:** se visualiza automáticamente la semana corriente limpia, independientemente de las anteriores. El cierre de la semana pasada es **manual**; no se genera ni se envía automáticamente el informe. Los pendientes sobreviven al cambio.
 
 El informe detallado incluye pendientes abiertos **al momento de imprimir**, no un snapshot histórico del día del cierre. Los registros de semanas cerradas pueden reabrirse manualmente.
@@ -117,11 +118,13 @@ src/
     manifest.ts          # web app manifest
     icon.svg             # ícono
   components/
-    WorkspaceGate.tsx    # auth, carga y upsert de workspaces
+    WorkspaceGate.tsx    # auth y restauración de sesión
+    CloudWorkspace.tsx   # carga por período, Realtime y SyncEngine
   lib/
     supabase.ts          # cliente Supabase en navegador
   App.tsx                # dashboard, grilla, clientes e informes
-  data.ts                # tipos, seed, fecha, localStorage
+  data.ts                # tipos, estado vacío, fechas, localStorage
+  sync/                  # versiones, cola por entidad y conflictos
   styles.css             # interfaz responsive e impresión
 public/icon.svg          # ícono manifest
 supabase/migrations/     # DDL y RLS
@@ -137,7 +140,7 @@ Next expone `/manifest.webmanifest` e íconos. La nube conserva caché del perí
 
 ## Limitaciones y riesgos
 
-- MVP en PR de borrador; sin despliegue productivo verificado.
+- MVP en main con despliegue en Vercel; todavía requiere validación humana de los flujos en dispositivos reales.
 - Pruebas de navegador realizadas con Auth/REST/Realtime simulados; el login real y los dispositivos físicos requieren validación de producción por el usuario.
 - Sin historial inmutable de auditoría; hay registros/versiones y conflictos, pero no se conserva cada versión anterior de una nota.
 - Validación de respaldo y gestión de errores de sincronización insuficientes para uso crítico.
@@ -153,17 +156,17 @@ El registro diario tiene un [modo rápido](docs/REGISTRO_RAPIDO.md) dentro de ca
 
 Registrar los cambios funcionales en [CHANGELOG.md](CHANGELOG.md), actualizar [estado actual](docs/ESTADO_ACTUAL.md) al incorporar capacidades y mover las tareas del backlog cuando se verifique su aceptación. Mantener PR pequeños, compilación verde y la migración SQL versionada en Git. **No fusionar el PR hasta validar compilación, autenticación, RLS, persistencia e impresión A4.**
 
-## Soporte planificado de Meta Ads y Google Ads
+## Meta Ads, Google Ads y FNG Companion
 
-**El código actual continúa siendo una bitácora genérica con textos y clientes, originalmente rotulada «Meta Ads». La diferenciación real de plataformas y los recordatorios inteligentes NO están implementados.**
+Las cuentas se identifican por plataforma e ID real, cargados desde Supabase. Un mismo cliente puede tener cuentas Meta y Google independientes. Los recordatorios inteligentes siguen pendientes.
 
-Se trabajará con el repositorio independiente [FNG-Companion](https://github.com/Ian9Franco/FNG-Companion), una extensión Chrome para detectar sesiones en **Meta Ads Manager y Google Ads** sin las Marketing APIs. Una sesión sugiere actividad, **no acredita modificaciones ni sustituye una revisión confirmada**.
+El repositorio independiente [FNG-Companion](https://github.com/Ian9Franco/FNG-Companion) contiene la extensión Chrome para detectar sesiones en **Meta Ads Manager y Google Ads**, y en calendario/compositor Meta autorizados, sin las Marketing APIs. Envía sesiones autenticadas y deduplicadas a la bandeja de Informes. Una sesión sugiere actividad, **no acredita modificaciones ni sustituye una revisión confirmada**.
 
-La relación prevista es **cliente comercial → cuentas publicitarias por plataforma → sesiones detectadas y revisiones declaradas**. Una misma empresa puede tener varias cuentas Meta y Google. Si una cuenta no revela su ID, quedará como desconocida hasta mapearla manualmente.
+La relación es **cliente comercial → cuentas publicitarias por plataforma → sesiones detectadas y revisiones declaradas**. Si una cuenta no revela su ID, queda sin identificar hasta confirmar su contexto en la DB; no se deduce a partir de IDs de usuario, negocio o campaña.
 
 Las alertas futuras tendrán dos orígenes: sesiones con documentación pendiente y revisiones **programadas** sin registro. No se exigirá revisar cada cuenta diariamente a menos que así se configure. Se definieron posponer para mañana/semana próxima/fecha personalizada, silencio mientras se registran notas y control de frecuencia.
 
-**Para recibir notificaciones en un teléfono no alcanza con instalar la PWA:** serán necesarios Web Push, service worker, permisos, suscripciones del dispositivo y un programador de avisos en el backend. No se han creado endpoints, tablas ni secrets de push.
+**Para recibir notificaciones en un teléfono no alcanza con instalar la PWA:** aún faltan permisos, suscripciones Web Push, endpoints y un programador de avisos. El Service Worker sólo contiene el receptor; el tipo de registro `subscription` está reservado, sin envío activo ni secrets de push.
 
 - [Contrato técnico con Companion](docs/COMPANION_INTEGRACION.md)
 - [Reglas futuras de recordatorios y push](docs/RECORDATORIOS.md)

@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import App from '../App'
 import { date, keyDate, load, type Store } from '../data'
-import { normalizeName, reconcileAccounts } from '../account-catalog'
+import { normalizeName } from '../account-catalog'
+import { withManagedClients } from '../clients'
 import { supabase } from '../lib/supabase'
 import { SyncEngine, type SyncView } from '../sync/engine'
 import { recordKey, rowsStore, storeRecords, type Change, type RecordRow } from '../sync/records'
@@ -110,18 +111,7 @@ export default function CloudWorkspace({ user, onPassword, onSignOut }: { user: 
     }
     const start = async () => {
       try {
-        let metadata = await read('metadata')
-        if (!metadata.some(row => row.kind === 'settings' && row.id === 'workspace')) {
-          const { data: legacy, error } = await client.from('workspaces').select('data').eq('user_id', userId).maybeSingle()
-          if (error) throw new Error(error.message)
-          const seed = reconcileAccounts((legacy?.data as Store | undefined) ?? load())
-          const records = [...storeRecords(seed).values()]
-          // Existing rows from a partial import are never overwritten by a fresh device.
-          const keys = new Set(metadata.map(recordKey))
-          const changes = records.filter(row => !keys.has(recordKey(row))).map(row => ({ ...row, expectedVersion: 0, deleted: false }))
-          for (let index = 0; index < changes.length; index += 150) await write(changes.slice(index, index + 150))
-          metadata = await read('metadata')
-        }
+        const metadata = await read('metadata')
         if (!alive) return
         sync.hydrate([...metadata, ...await read('period', range.current.start, range.current.end)])
         loadedRanges.current.add(`${range.current.start}:${range.current.end}`)
@@ -151,7 +141,7 @@ export default function CloudWorkspace({ user, onPassword, onSignOut }: { user: 
   const onChange = useCallback((store: Store) => engine.current?.edit(store), [])
   const changePeriod = useCallback((start: string, end: string) => { void fetchPeriod(start, end).catch(error => setFailure(String(error))) }, [fetchPeriod])
   const exportAll = useCallback(async () => rowsStore(await read('all'), engine.current?.queued.values()), [read])
-  const importAll = useCallback(async (store: Store) => { const rows = await read('all'); engine.current?.receive(rows); engine.current?.edit(reconcileAccounts(store)) }, [read])
+  const importAll = useCallback(async (store: Store) => { const rows = await read('all'); engine.current?.receive(rows); engine.current?.edit(withManagedClients(rowsStore(rows), store)) }, [read])
   const mergeLegacy = useCallback(async () => {
     try {
       const rows = await read('all')
@@ -162,7 +152,6 @@ export default function CloudWorkspace({ user, onPassword, onSignOut }: { user: 
       for (const client of old.clients) {
         const match = remote.clients.find(existing => existing.id === client.id || normalizeName(existing.name) === normalizeName(client.name) || existing.advertisingAccounts?.some(account => client.advertisingAccounts?.some(candidate => candidate.platform === account.platform && candidate.accountId === account.accountId)))
         if (match) mapping.set(client.id, match.id)
-        else { remote.clients.push(client); mapping.set(client.id, client.id) }
       }
       const actionMapping = new Map<string, CustomAction>()
       remote.customActions ??= []
