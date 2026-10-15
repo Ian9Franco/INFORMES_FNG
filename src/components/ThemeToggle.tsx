@@ -24,7 +24,7 @@ export default function ThemeToggle() {
   function toggle() {
     const next = dark ? 'light' : 'dark'
     document.documentElement.dataset.theme = next
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#f4f0e7' : '#191d1c')
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#f4f0e7' : '#171c1b')
     try { localStorage.setItem('informe-ian-theme', next) } catch { /* Theme still works in memory. */ }
     setDark(!dark)
   }

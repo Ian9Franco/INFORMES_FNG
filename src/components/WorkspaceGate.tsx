@@ -36,15 +36,21 @@ export default function WorkspaceGate() {
   useEffect(() => {
     if (!client) return
     let alive = true
+    let authRevision = 0
+    // SDK-managed refresh tokens persist on this browser; never cache passwords.
+    void client.auth.getSession().then(({ data }) => {
+      if (alive && authRevision === 0 && data.session) { setUser(data.session.user); setBusy(false) }
+    }).catch(() => { /* The verified request below supplies the error. */ })
     client.auth.getUser().then(({ data, error }) => {
-      if (!alive) return
+      if (!alive || authRevision !== 0) return
       if (data.user) setUser(data.user)
       else if (!error || error.name === 'AuthSessionMissingError') setUser(null)
       if (error && error.name !== 'AuthSessionMissingError') setMessage(authFeedback(error))
       setBusy(false)
-    }).catch(() => { if (alive) { setMessage('No se pudo conectar.'); setBusy(false) } })
+    }).catch(() => { if (alive && authRevision === 0) { setMessage('No se pudo conectar.'); setBusy(false) } })
     const { data: listener } = client.auth.onAuthStateChange((event, session) => {
       if (!alive) return
+      if (event !== 'INITIAL_SESSION') authRevision++
       setUser(session?.user ?? null)
       setBusy(false)
       if (event === 'PASSWORD_RECOVERY') setPasswordDialog(true)
@@ -118,8 +124,8 @@ export default function WorkspaceGate() {
     </div>
   </main>
   return <>
-    <div className="session-bar screen"><span>{user.email}</span><button onClick={() => setPasswordDialog(true)}>Contraseña de mi cuenta</button><button onClick={() => client.auth.signOut()}>Cerrar sesión</button></div>
-    <CloudWorkspace key={user.id} user={user} />
+
+    <CloudWorkspace key={user.id} user={user} onPassword={() => setPasswordDialog(true)} onSignOut={async () => { const { error } = await client.auth.signOut(); if (error) throw error }} />
     {passwordDialog ? <AccountPasswordDialog key={user.id} onClose={() => setPasswordDialog(false)} /> : null}
   </>
 }

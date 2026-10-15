@@ -5,6 +5,11 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — mejoras continuas
 
 ### Interfaz operativa
+- Acciones personalizadas con ID estable: generales para la cuenta o exclusivas de un cliente, sincronizadas por registro y con alcance validado en Postgres; snapshot de etiquetas en el historial.
+- «Programé publicación» en Meta (`meta.post.scheduled`), con cantidades, días destino y resumen `P:` en informes normales y detalle completo en PNG/PDF.
+- Cabecera única: tema y cuenta juntos; correo, contraseña, cierre de sesión y actualización dentro del menú. Estado explícito de DB, separado de Companion.
+- Restauración inicial de sesión mediante el SDK de Supabase y refresh tokens persistentes, sin cachear contraseñas ni respuestas privadas en Service Worker.
+- Paletas claro/oscuro con contraste AA en pares principales, sombras de elevación/pulsación y confirmaciones accesibles con diseño propio en lugar de `window.confirm`.
 - Intercambio de páginas secuencial: salida completa antes de entrar, controles inertes durante salida y posición de lectura restaurada sin superponer contenido.
 - Resumen diario compacto y ancho de escritorio ampliado, filas móviles de una sola línea y eliminación de renglones repetidos/dobles separadores.
 - Bandeja de Companion plegable para mantener las revisiones a mano aun con muchas sesiones observadas.

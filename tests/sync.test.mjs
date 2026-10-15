@@ -1,10 +1,20 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { SyncEngine } from '../src/sync/engine.ts'
-import { diffStore, monthBounds, rowsStore, samePayload } from '../src/sync/records.ts'
+import { changePriority, diffStore, monthBounds, rowsStore, samePayload, storeRecords } from '../src/sync/records.ts'
 
 const row = (name = 'ALLEGRA', version = 1) => ({ kind: 'client', id: 'a', payload: { id: 'a', name, active: true }, version, deleted: false })
 const storage = () => { const map = new Map(); return { getItem: key => map.get(key) ?? null, setItem: (key,value) => map.set(key,value) } }
+
+test('custom definitions round-trip as individual records and precede dependent reviews', () => {
+  const before=rowsStore([row()])
+  const definition={id:'custom.00000000-0000-4000-8000-000000000001',label:'Actualicé catálogo',platform:'meta_ads',scope:'client',clientId:'a'}
+  const after={...before,customActions:[definition],reviews:[{id:'review',clientId:'a',date:'2026-10-15',actions:'',observations:'',createdAt:'2026-10-15T12:00:00Z',actionEntries:[]}]}
+  const changes=diffStore(before,after,new Map(),new Map()).sort((a,b)=>changePriority(a)-changePriority(b))
+  assert.deepEqual(changes.map(change=>change.kind),['action','review'])
+  assert.deepEqual(rowsStore([...storeRecords(after).values()].map(record=>({...record,deleted:false,version:1}))).customActions,[definition])
+  assert.equal(changePriority({...changes[0],kind:'client'}),0)
+})
 
 test('period bounds preserve December rollover and payload equality ignores JSON key order', () => {
   assert.deepEqual(monthBounds('2026-12'), { start: '2026-12-01', end: '2027-01-01' })

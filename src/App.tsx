@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from 'motion/react'
 import ThemeToggle from './components/ThemeToggle'
+import useConfirmation from './components/useConfirmation'
 import ClientPicker from './components/ClientPicker'
 import NotebookReport from './components/NotebookReport'
 import { reconcileAccounts } from './account-catalog'
 import { newClient, sortClients } from './clients'
 import { ExternalLink } from 'lucide-react'
-import { monthBounds } from './sync/records'
+import { monthBounds, samePayload } from './sync/records'
 import CompanionAccess from './components/CompanionAccess'
 import QuickActions from './components/QuickActions'
 import ReviewDetailsFields from './components/ReviewDetailsFields'
@@ -16,7 +17,7 @@ import RapidReviewSection from './components/RapidReviewSection'
 import NotebookPage from './components/NotebookPage'
 import { draftChanged, draftKey, nextPendingClient, readDrafts, reviewSignature, type ReviewDrafts } from './review-workflow'
 import { AnimatedChart } from './components/AnimatedSymbols'
-import { ACTION_SCHEMA_VERSION, describeReviewActions, storyDaysLabel, validReviewActions, type ReviewAction } from './review-actions'
+import { ACTION_SCHEMA_VERSION, describeReviewActions, storyDaysLabel, validReviewActions, type CustomAction, validCustomAction, type ReviewAction } from './review-actions'
 import {
   type Client,
   type Review,
@@ -82,8 +83,9 @@ function EmptyState({ icon, title, text }: { icon: IconName; title: string; text
   return <div className="empty-state"><span><Icon name={icon} size={22} /></span><h3>{title}</h3><p>{text}</p></div>
 }
 
-export default function App({ initialData, onChange, storageMode = 'local', userId, onPeriodChange, onExport, onImport }: { initialData?: Store; onChange?: (data: Store) => void; storageMode?: 'local' | 'cloud'; userId?: string; onPeriodChange?: (start: string, end: string) => void; onExport?: () => Promise<Store>; onImport?: (store: Store) => Promise<void> }) {
+export default function App({ initialData, onChange, storageMode = 'local', userId, onPeriodChange, onExport, onImport, headerTools, readOnly = false }: { readOnly?: boolean; headerTools?: React.ReactNode; initialData?: Store; onChange?: (data: Store) => void; storageMode?: 'local' | 'cloud'; userId?: string; onPeriodChange?: (start: string, end: string) => void; onExport?: () => Promise<Store>; onImport?: (store: Store) => Promise<void> }) {
   const [db, setDbState] = useState<Store>(() => { const store = reconcileAccounts(initialData ?? load()); return { ...store, clients: sortClients(store.clients) } })
+  const { confirm, confirmation } = useConfirmation()
   const dbRef = useRef(db)
   dbRef.current = db
   const firstPersistence = useRef(true)
@@ -305,6 +307,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
 
   function saveReview(andNext = false) {
     if (!selected?.id || closingReview || db.closed.includes(monday(date(selected.day))) || !validReviewActions(actionEntries)) return
+    if (actionEntries.some(entry => entry.customDefinition && (entry.customDefinition.scope === 'client' && entry.customDefinition.clientId !== selected.id || !dbRef.current.customActions?.some(definition => definition.id === entry.typeId)))) { setError('Una acción no está disponible para este cliente. Quitala y seleccioná una del catálogo.'); return }
     const previous = dbRef.current.reviews.find(item => item.clientId === selected.id && item.date === selected.day)
     if (previous?.revision !== formRevision.current || reviewSignature(previous) !== reviewSignature(formBase.current)) { setNotice('Esta revisión cambió en otro dispositivo. Tu borrador está conservado; copiá tus notas y cargá la versión actual antes de guardar.'); return }
     const item: Review = {
@@ -360,9 +363,10 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     setUndoReview(null); setNotice('Revisión sin cambios deshecha')
   }
 
-  function removeReview() {
+  async function removeReview() {
     if (!current) return
-    if (!window.confirm('¿Quitar esta revisión? Las observaciones asociadas también se eliminarán.')) return
+    if (!await confirm({ title: '¿Quitar esta revisión?', message: 'Las acciones y observaciones asociadas también se eliminarán.', accept: 'Eliminar revisión', danger: true })) return
+    if (reviewSignature(dbRef.current.reviews.find(item => item.id === current.id)) !== reviewSignature(current) || dbRef.current.closed.includes(monday(date(current.date)))) { setError('La revisión cambió o la semana se cerró. Volvé a abrirla antes de eliminar.'); return }
     setDb(currentDb => ({ ...currentDb, reviews: currentDb.reviews.filter(reviewItem => reviewItem.id !== current.id) }))
     if (selected) updateDraft(draftKey(selected.id, selected.day), null)
     closeReview(true)
@@ -384,8 +388,8 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     event.preventDefault(); saveReview(event.shiftKey)
   }
 
-  function reloadReview() {
-    if (selected && window.confirm('¿Descartar este borrador y cargar la revisión actual? Copiá antes las notas que quieras conservar.')) openReview(selected.id, selected.day, selected.mode, true)
+  async function reloadReview() {
+    if (selected && await confirm({ title: '¿Descartar el borrador?', message: 'Se cargará la revisión actual. Copiá antes las notas que quieras conservar.', accept: 'Cargar revisión' })) openReview(selected.id, selected.day, selected.mode, true)
   }
 
   function resolvePending(pendingId: string) {
@@ -418,13 +422,14 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     setNotice(clientItem.active ? 'Cliente archivado' : 'Cliente reactivado')
   }
 
-  function deleteClient(clientItem: Client) {
-    const hasHistory = db.reviews.some(item => item.clientId === clientItem.id) || db.pending.some(item => item.clientId === clientItem.id)
+  async function deleteClient(clientItem: Client) {
+    const hasHistory = db.reviews.some(item => item.clientId === clientItem.id) || db.pending.some(item => item.clientId === clientItem.id) || db.customActions?.some(item => item.clientId === clientItem.id)
     if (hasHistory) {
-      setError('Este cliente tiene historial. Podés archivarlo para conservar sus revisiones y pendientes.')
+      setError('Este cliente tiene historial o acciones propias. Podés archivarlo para conservar sus datos.')
       return
     }
-    if (!window.confirm(`¿Eliminar definitivamente a ${clientItem.name}?`)) return
+    if (!await confirm({ title: '¿Eliminar cliente?', message: `${clientItem.name} se eliminará definitivamente. Podés archivarlo si preferís conservarlo.`, accept: 'Eliminar cliente', danger: true })) return
+    if (dbRef.current.reviews.some(item => item.clientId === clientItem.id) || dbRef.current.pending.some(item => item.clientId === clientItem.id) || dbRef.current.customActions?.some(item => item.clientId === clientItem.id)) { setError('Este cliente ahora tiene historial o acciones propias. Archivá en lugar de eliminar.'); return }
     setDb(currentDb => ({ ...currentDb, clients: currentDb.clients.filter(item => item.id !== clientItem.id) }))
     setNotice('Cliente eliminado')
   }
@@ -471,9 +476,22 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     file.text().then(async content => {
       const value: unknown = JSON.parse(content)
       if (!value || typeof value !== 'object' || !('clients' in value) || !('reviews' in value) || !('pending' in value) || !('closed' in value) || !Array.isArray(value.clients) || !Array.isArray(value.reviews) || !Array.isArray(value.pending) || !Array.isArray(value.closed)) throw Error('Formato inválido')
+      if ('customActions' in value && (!Array.isArray(value.customActions) || !value.customActions.every(validCustomAction))) throw Error('Catálogo inválido')
       if (value.reviews.some(item => !item || typeof item !== 'object' || ('actionEntries' in item && (!validReviewActions(item.actionEntries) || item.actionSchemaVersion !== ACTION_SCHEMA_VERSION)))) throw Error('Acciones inválidas')
-      if (window.confirm('¿Reemplazar todos los datos por este respaldo?')) {
+      if (await confirm({ title: '¿Restaurar respaldo?', message: 'Se reemplazarán todos tus datos por este archivo. Descargá una copia actual antes de continuar.', accept: 'Reemplazar datos', danger: true })) {
         const store = reconcileAccounts(value as Store)
+        // Old backups must not tombstone immutable definitions or orphan their clients.
+        const catalog = new Map((dbRef.current.customActions ?? []).map(item => [item.id, item]))
+        for (const definition of store.customActions ?? []) {
+          if (catalog.has(definition.id) && !samePayload(catalog.get(definition.id), definition)) throw Error('Definición histórica alterada')
+          catalog.set(definition.id, definition)
+        }
+        store.customActions = [...catalog.values()]
+        for (const definition of store.customActions) if (definition.clientId && !store.clients.some(item => item.id === definition.clientId)) {
+          const client = dbRef.current.clients.find(item => item.id === definition.clientId)
+          if (client) store.clients.push({ ...client, active: false })
+          else throw Error('Cliente de acción inexistente')
+        }
         if (onImport) await onImport(store)
         else setDb({ ...store, clients: sortClients(store.clients) })
         setNotice('Respaldo restaurado')
@@ -481,14 +499,19 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     }).catch(() => setError('El respaldo no es válido.'))
   }
 
-  function toggleWeekClosed() {
+  async function toggleWeekClosed() {
     const message = closed ? '¿Reabrir esta semana para volver a editarla?' : '¿Cerrar esta semana y bloquear su edición?'
-    if (!window.confirm(message)) return
+    if (!await confirm({ title: closed ? 'Reabrir semana' : 'Cerrar semana', message, accept: closed ? 'Reabrir' : 'Cerrar semana' })) return
     setDb(currentDb => ({
       ...currentDb,
       closed: closed ? currentDb.closed.filter(item => item !== week) : [...currentDb.closed, week],
     }))
     setNotice(closed ? 'Semana reabierta' : 'Semana cerrada')
+  }
+
+  function createAction(definition: CustomAction) {
+    setDb(currentDb => ({ ...currentDb, customActions: [...(currentDb.customActions ?? []), definition] }))
+    setNotice(definition.scope === 'client' ? 'Acción creada sólo para este cliente' : 'Acción creada para todos tus clientes')
   }
 
   const pageTitles: Record<Tab, { eyebrow: string; title: string; description: string }> = {
@@ -500,16 +523,16 @@ export default function App({ initialData, onChange, storageMode = 'local', user
 
   const title = pageTitles[tab]
 
-  return <MotionConfig reducedMotion="user"><div className="app-shell">
+  return <MotionConfig reducedMotion="user"><div className="app-shell">{confirmation}
     <header className="app-navigation screen">
       <div className="wordmark"><span className="wordmark-symbol">f.</span><div><strong>Informes FNG</strong><small>Mi libreta de trabajo</small></div></div>
       <LayoutGroup id="workspace-navigation"><nav aria-label="Navegación principal">
         {navItems.map(item => <motion.button whileHover={calm ? undefined : { scale: 1.035 }} whileTap={calm ? undefined : { scaleX: 1.06, scaleY: .9 }} transition={{ type: 'spring', stiffness: 450, damping: 18, mass: .55 }} key={item.id} aria-current={tab === item.id ? 'page' : undefined} className={tab === item.id ? 'active' : ''} onClick={() => navigate(item.id)}>{tab === item.id ? <motion.span className="navigation-highlight" layoutId="active-navigation" transition={calm ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 36 }} /> : null}<span className="navigation-icon">{item.id === 'jornada' ? <AnimatedChart active={tab === item.id} /> : <Icon name={item.icon} />}</span><span className="navigation-label">{item.label}</span>{item.id === 'jornada' && pending.length > 0 ? <b>{pending.length}</b> : null}</motion.button>)}
       </nav></LayoutGroup>
-      <div className="navigation-tools"><span className="storage-indicator"><i />{storageMode === 'cloud' ? 'Conectado' : 'En este dispositivo'}</span><ThemeToggle /></div>
+      <div className="navigation-tools"><ThemeToggle />{headerTools ?? <span className="storage-indicator">Guardado local</span>}</div>
     </header>
 
-    <div className="notebook-pages screen"><AnimatePresence mode="wait" initial={false} custom={direction} onExitComplete={() => requestAnimationFrame(() => window.scrollTo({ top: scrollPositions.current[tab] ?? 0, behavior: 'instant' }))}>
+    <div className="notebook-pages screen" inert={readOnly}><AnimatePresence mode="wait" initial={false} custom={direction} onExitComplete={() => requestAnimationFrame(() => window.scrollTo({ top: scrollPositions.current[tab] ?? 0, behavior: 'instant' }))}>
     <NotebookPage key={tab} name={tab} side={direction} onEntered={() => setTurningPage(false)}>
       <header className="page-header">
         <div><span className="eyebrow">{title.eyebrow}</span><h1>{title.title}</h1><p>{title.description}</p></div>
@@ -545,7 +568,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
               return <article key={clientItem.id} data-client-id={clientItem.id} className={`review-item ${expanded ? 'is-expanded' : ''}`}>
               <div className="review-row-header"><button className="review-row" aria-expanded={expanded} aria-controls={`rapid-${clientItem.id}`} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline')}>
                 <span className={`review-state ${reviewItem ? 'done' : ''}`}>{reviewItem ? <Icon name="check" /> : <span />}</span>
-                <span className="review-name"><strong>{clientItem.name}</strong><small>{reviewItem ? `${storyDaysLabel([reviewItem]) ? `Historia → ${storyDaysLabel([reviewItem])} · ` : ''}${describeReviewActions(reviewItem) || reviewItem.observations || 'Revisión registrada'}` : 'Todavía sin revisar'}</small></span>
+                <span className="review-name"><strong>{clientItem.name}</strong><small>{reviewItem ? `${storyDaysLabel([reviewItem]) ? `Historia → ${storyDaysLabel([reviewItem])} · ` : ''}${storyDaysLabel([reviewItem], true, 'meta.post.scheduled') ? `Publicación → ${storyDaysLabel([reviewItem], true, 'meta.post.scheduled')} · ` : ''}${describeReviewActions(reviewItem) || reviewItem.observations || 'Revisión registrada'}` : 'Todavía sin revisar'}</small></span>
                 <span className={`state-pill ${reviewItem ? 'done' : ''}`}>{hasDraft ? 'Borrador' : reviewItem ? 'Revisado' : 'Pendiente'}</span>
                 <Icon name="chevron-right" />
               </button>
@@ -553,7 +576,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
               <AnimatePresence initial={false}>{expanded ? <RapidReviewSection id={`rapid-${clientItem.id}`} key="editor" label={`Registro rápido de ${clientItem.name}`} onKeyDown={reviewShortcut}>
                 <div className="rapid-review-heading"><span>Borrador en este dispositivo · confirmá para completar</span><button type="button" className="text-button" onClick={() => setSelected({ ...selected!, mode: 'modal' })}>Edición detallada <Icon name="chevron-right" size={14} /></button></div>
                 {reviewSignature(current) !== reviewSignature(formBase.current) ? <div className="draft-conflict" role="status">La revisión cambió. Conservamos tu borrador.<button type="button" onClick={reloadReview}>Cargar versión actual</button></div> : null}
-                <QuickActions value={actionEntries} onChange={setActionEntries} compact storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
+                <QuickActions clientId={selected?.id} catalog={db.customActions} onCreate={createAction} value={actionEntries} onChange={setActionEntries} compact storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
                 <details className="rapid-details"><summary>Notas y pendientes{actions || observations || pendingText ? ' · con contenido' : ' · opcional'}</summary><ReviewDetailsFields actions={actions} observations={observations} pendingText={pendingText} onActions={setActions} onObservations={setObservations} onPending={setPendingText} onAddPending={addPending} /></details>
               </RapidReviewSection> : null}</AnimatePresence>
               </article>
@@ -629,7 +652,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
         <div className="review-modal-body">
         {reviewSignature(current) !== reviewSignature(formBase.current) ? <div className="draft-conflict" role="status">La revisión cambió. Conservamos tu borrador.<button type="button" onClick={reloadReview}>Cargar versión actual</button></div> : null}
         <ClientPicker clients={active} value={selected.id} onChange={id => openReview(id, selected.day)} />
-        <QuickActions value={actionEntries} onChange={setActionEntries} storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
+        <QuickActions clientId={selected?.id} catalog={db.customActions} onCreate={createAction} value={actionEntries} onChange={setActionEntries} storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
         <ReviewDetailsFields actions={actions} observations={observations} pendingText={pendingText} onActions={setActions} onObservations={setObservations} onPending={setPendingText} onAddPending={addPending} />
         </div>
         <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : null}<div><button className="secondary-button" onClick={() => closeReview()}>Salir</button><button className="primary-button" disabled={!client || closingReview} onClick={() => saveReview()}><Icon name="check" />Guardar revisión</button><button className="secondary-button" disabled={!client || closingReview} onClick={() => saveReview(true)}>Guardar y siguiente</button></div></footer>

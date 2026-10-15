@@ -83,6 +83,12 @@ El catálogo web incluye el ID inmutable `meta.story.scheduled`. En `ReviewActio
 
 Es una declaración de trabajo registrado, no una orden para publicar en Meta. La extensión continúa enviando sesiones observadas, no inventa esta acción ni sus días destino. Una futura sugerencia de Companion deberá tener `sourceEventId` y confirmación explícita como las demás acciones. La fecha de revisión es la de registro; `scheduledDays` no reemplaza esa fecha.
 
+## Catálogo personalizado y publicaciones
+
+`meta.post.scheduled` declara publicaciones programadas con el mismo contrato `quantity`/`scheduledDays` que historias. Las definiciones personalizadas usan `kind=action`, ID `custom.<uuid-v4>`, `label`, `platform`, `scope` (`general` o `client`) y `clientId` sólo si el alcance es cliente. «General» es para los clientes del usuario autenticado, no un catálogo público.
+
+Una entrada personalizada referencia ese ID en `typeId` y copia la definición completa en `customDefinition`. El servidor comprueba coincidencia exacta con la definición de ese usuario y alcance del cliente. Los IDs y definiciones son inmutables. Companion deberá leer el catálogo autenticado, no inferir acciones a partir de las páginas visitadas; la ingesta actual continúa limitada a sesiones observadas.
+
 ## Notificaciones (pendiente)
 
 Leer [RECORDATORIOS.md](RECORDATORIOS.md) antes de implementar push. Todo queda como propuesta pendiente de desarrollo.

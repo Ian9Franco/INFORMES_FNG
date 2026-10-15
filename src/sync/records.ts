@@ -1,11 +1,11 @@
 import type { Activity, Store } from '../data'
 import { sortClients } from '../clients.ts'
 
-export type Kind = 'client' | 'review' | 'task' | 'closure' | 'settings' | 'event' | 'subscription'
+export type Kind = 'client' | 'action' | 'review' | 'task' | 'closure' | 'settings' | 'event' | 'subscription'
 export type RecordRow = { user_id?: string; kind: Kind; id: string; payload: Record<string, unknown>; version: number; deleted: boolean; review_date?: string; updated_at?: string }
 export type Change = { kind: Kind; id: string; payload: Record<string, unknown>; expectedVersion: number; deleted: boolean }
 export const recordKey = (record: { kind: string; id: string }) => `${record.kind}:${record.id}`
-export const changePriority = (change: Change) => change.kind === 'client' && !change.deleted || change.kind === 'closure' && change.deleted ? 0 : change.deleted && (change.kind === 'review' || change.kind === 'task') ? 1 : change.kind === 'client' ? 3 : change.kind === 'closure' ? 4 : change.kind === 'settings' ? 5 : 2
+export const changePriority = (change: Change) => change.kind === 'client' && !change.deleted || change.kind === 'closure' && change.deleted ? 0 : change.kind === 'action' || change.deleted && (change.kind === 'review' || change.kind === 'task') ? 1 : change.kind === 'client' ? 3 : change.kind === 'closure' ? 4 : change.kind === 'settings' ? 5 : 2
 const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)])) : value
 export const samePayload = (a: unknown, b: unknown) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b))
 
@@ -13,6 +13,7 @@ export function storeRecords(store: Store): Map<string, { kind: Kind; id: string
   const records = new Map<string, { kind: Kind; id: string; payload: Record<string, unknown> }>()
   const add = (kind: Kind, id: string, payload: Record<string, unknown>) => records.set(recordKey({ kind, id }), { kind, id, payload })
   store.clients.forEach(client => add('client', client.id, { ...client }))
+  store.customActions?.forEach(action => add('action', action.id, { ...action }))
   store.reviews.forEach(({ revision: _revision, ...review }) => add('review', review.id, { ...review }))
   store.pending.forEach(task => add('task', task.id, { ...task }))
   store.closed.forEach(day => add('closure', day, { id: day }))
@@ -32,6 +33,7 @@ export function rowsStore(rows: Iterable<RecordRow>, pending: Iterable<Change> =
     closed: live.filter(row => row.kind === 'closure').map(row => row.id),
     accountCatalogVersion: Number(live.find(row => row.kind === 'settings' && row.id === 'workspace')?.payload.accountCatalogVersion ?? 0),
     activity: live.filter(row => row.kind === 'event').map(row => row.payload as unknown as Activity),
+    customActions: live.filter(row => row.kind === 'action').map(row => row.payload as unknown as NonNullable<Store['customActions']>[number]),
   }
 }
 

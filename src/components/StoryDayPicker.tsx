@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { CalendarDays, ChevronDown } from 'lucide-react'
 import { STORY_DAYS, type StoryDay } from '../review-actions'
 
-export default function StoryDayPicker({ value, onChange }: { value: StoryDay[]; onChange: (days: StoryDay[]) => void }) {
+export default function StoryDayPicker({ value, onChange, publication = false }: { value: StoryDay[]; onChange: (days: StoryDay[]) => void; publication?: boolean }) {
   const id = useId()
   const trigger = useRef<HTMLButtonElement>(null)
   const menu = useRef<HTMLDivElement>(null)
@@ -33,7 +33,7 @@ export default function StoryDayPicker({ value, onChange }: { value: StoryDay[];
   const label = STORY_DAYS.filter(day => value.includes(day.id)).map(day => day.short).join(' · ')
   return <div className="story-day-control">
     <button ref={trigger} type="button" className="story-day-trigger" popoverTarget={id} aria-haspopup="dialog" aria-controls={id} aria-expanded={open} onClick={position}><CalendarDays size={15} aria-hidden="true" /><span>Para {label}</span><ChevronDown size={14} aria-hidden="true" /></button>
-    <div ref={menu} id={id} popover="auto" className="story-day-menu screen" role="dialog" aria-label="Días de la historia programada" onToggle={event => { const visible = event.currentTarget.matches(':popover-open'); setOpen(visible); if (visible) { position(); event.currentTarget.querySelector<HTMLButtonElement>('[role="checkbox"]:not(:disabled)')?.focus({ preventScroll: true }) } }} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); event.preventDefault(); close() } }}>
+    <div ref={menu} id={id} popover="auto" className="story-day-menu screen" role="dialog" aria-label={publication ? 'Días de la publicación programada' : 'Días de la historia programada'} onToggle={event => { const visible = event.currentTarget.matches(':popover-open'); setOpen(visible); if (visible) { position(); event.currentTarget.querySelector<HTMLButtonElement>('[role="checkbox"]:not(:disabled)')?.focus({ preventScroll: true }) } }} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); event.preventDefault(); close() } }}>
       <strong>¿Para qué días?</strong><p>Podés elegir varios. Conservá al menos uno.</p>
       <div role="group" aria-label="Días programados">{STORY_DAYS.map(day => <button key={day.id} type="button" role="checkbox" aria-label={day.label} aria-checked={value.includes(day.id)} disabled={value.length === 1 && value.includes(day.id)} onClick={() => onChange(STORY_DAYS.filter(option => option.id === day.id ? !value.includes(day.id) : value.includes(option.id)).map(option => option.id))}>{day.short}<span aria-hidden="true">{value.includes(day.id) ? '✓' : '+'}</span></button>)}</div>
       <button type="button" className="story-days-done" onClick={close}>Listo</button>

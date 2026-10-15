@@ -19,6 +19,7 @@ export const ACTION_TYPES = [
   { id: 'meta.budget.updated', platform: 'meta_ads', label: 'Ajusté presupuestos', unit: 'ajustes' },
   { id: 'meta.audience.updated', platform: 'meta_ads', label: 'Actualicé audiencias', unit: 'audiencias' },
   { id: 'meta.story.scheduled', platform: 'meta_ads', label: 'Programé historia', unit: 'historias' },
+  { id: 'meta.post.scheduled', platform: 'meta_ads', label: 'Programé publicación', unit: 'publicaciones' },
   { id: 'google.ad.created', platform: 'google_ads', label: 'Añadí anuncios', unit: 'anuncios' },
   { id: 'google.ad.deleted', platform: 'google_ads', label: 'Eliminé anuncios', unit: 'anuncios' },
   { id: 'google.ad.updated', platform: 'google_ads', label: 'Actualicé anuncios', unit: 'anuncios' },
@@ -31,7 +32,15 @@ export const ACTION_TYPES = [
   { id: 'google.budget.updated', platform: 'google_ads', label: 'Ajusté presupuestos', unit: 'ajustes' },
   { id: 'google.bidding.updated', platform: 'google_ads', label: 'Actualicé pujas', unit: 'ajustes' },
 ] as const
-export type ActionTypeId = typeof ACTION_TYPES[number]['id']
+export type ActionTypeId = typeof ACTION_TYPES[number]['id'] | `custom.${string}`
+export type CustomAction = { id: `custom.${string}`; label: string; platform: AdPlatform; scope: 'general' | 'client'; clientId?: string }
+export function validCustomAction(value: unknown): value is CustomAction {
+  if (!value || typeof value !== 'object') return false
+  const item = value as CustomAction
+  return typeof item.id === 'string' && /^custom\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(item.id) && typeof item.label === 'string' && item.label === item.label.trim() && item.label.length >= 2 && item.label.length <= 80 && ['meta_ads', 'google_ads'].includes(item.platform) && (item.scope === 'general' ? item.clientId === undefined : item.scope === 'client' && typeof item.clientId === 'string' && Boolean(item.clientId))
+}
+export const isScheduledAction = (id: string) => id === 'meta.story.scheduled' || id === 'meta.post.scheduled'
+export const availableCustomActions = (catalog: CustomAction[], clientId?: string) => catalog.filter(item => validCustomAction(item) && (item.scope === 'general' || item.clientId === clientId))
 export type ReviewAction = {
   id: string
   typeId: ActionTypeId
@@ -40,19 +49,22 @@ export type ReviewAction = {
   evidence: 'user_confirmed' | 'observed'
   sourceEventId?: string
   scheduledDays?: StoryDay[]
+  /** Snapshot keeps historical reports readable independently of the catalog. */
+  customDefinition?: CustomAction
 }
 
 export function actionDefinition(id: string) { return ACTION_TYPES.find(item => item.id === id) }
+export function entryDefinition(entry: ReviewAction) { return actionDefinition(entry.typeId) ?? entry.customDefinition }
 
 export function validReviewActions(value: unknown): value is ReviewAction[] {
-  if (!Array.isArray(value)) return false
+  if (!Array.isArray(value) || value.length > 40) return false
   const ids = new Set<string>()
   const types = new Set<string>()
   return value.every(item => {
-    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id || ids.has(item.id) || types.has(item.typeId) || !actionDefinition(item.typeId) || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 999 || !['manual', 'companion'].includes(item.source) || !['user_confirmed', 'observed'].includes(item.evidence)) return false
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id || ids.has(item.id) || types.has(item.typeId) || !(actionDefinition(item.typeId) ? item.customDefinition === undefined : validCustomAction(item.customDefinition) && item.customDefinition.id === item.typeId) || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 999 || !['manual', 'companion'].includes(item.source) || !['user_confirmed', 'observed'].includes(item.evidence)) return false
     if (item.source === 'manual' && item.evidence !== 'user_confirmed') return false
     if (item.source === 'companion' && (typeof item.sourceEventId !== 'string' || !item.sourceEventId)) return false
-    if (item.typeId === 'meta.story.scheduled') {
+    if (isScheduledAction(item.typeId)) {
       if (!Array.isArray(item.scheduledDays) || !item.scheduledDays.length || item.scheduledDays.length > 7 || new Set(item.scheduledDays).size !== item.scheduledDays.length || item.scheduledDays.some((day: unknown) => !STORY_DAYS.some(option => option.id === day))) return false
     } else if (item.scheduledDays !== undefined) return false
     ids.add(item.id); types.add(item.typeId)
@@ -63,14 +75,14 @@ export function validReviewActions(value: unknown): value is ReviewAction[] {
 export function describeReviewActions(review: { actions: string; actionEntries?: ReviewAction[] }) {
   const entries = validReviewActions(review.actionEntries) ? review.actionEntries : []
   const lines = entries.map(item => {
-    const definition = actionDefinition(item.typeId)!
-    const scheduled = item.typeId === 'meta.story.scheduled' ? ` · para ${STORY_DAYS.filter(day => item.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')}` : ''
+    const definition = entryDefinition(item)!
+    const scheduled = isScheduledAction(item.typeId) ? ` · para ${STORY_DAYS.filter(day => item.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')}` : ''
     return `${definition.platform === 'meta_ads' ? 'Meta' : 'Google'} · ${definition.label}: ${item.quantity}${scheduled}${item.evidence === 'observed' ? ' (por confirmar)' : ''}`
   })
   return [...lines, review.actions].filter(Boolean).join('\n')
 }
 
-export function storyDaysLabel(reviews: { actionEntries?: ReviewAction[] }[], short = true) {
-  const selected = new Set(reviews.flatMap(review => (review.actionEntries ?? []).filter(entry => entry.typeId === 'meta.story.scheduled').flatMap(entry => entry.scheduledDays ?? [])))
+export function storyDaysLabel(reviews: { actionEntries?: ReviewAction[] }[], short = true, typeId = 'meta.story.scheduled') {
+  const selected = new Set(reviews.flatMap(review => (review.actionEntries ?? []).filter(entry => entry.typeId === typeId).flatMap(entry => entry.scheduledDays ?? [])))
   return STORY_DAYS.filter(day => selected.has(day.id)).map(day => short ? day.short : day.label).join(' · ')
 }

@@ -1,8 +1,33 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ACTION_TYPES, actionDefinition, describeReviewActions, storyDaysLabel, validReviewActions } from '../src/review-actions.ts'
+import { ACTION_TYPES, actionDefinition, availableCustomActions, describeReviewActions, storyDaysLabel, validCustomAction, validReviewActions } from '../src/review-actions.ts'
 
 const manual = { id: 'event-1', typeId: 'meta.ad.created', quantity: 3, source: 'manual', evidence: 'user_confirmed' }
+
+test('custom actions have stable IDs, explicit scope and self-contained historical labels', () => {
+  const custom = { id:'custom.00000000-0000-4000-8000-000000000001', label:'Actualicé el catálogo', platform:'meta_ads', scope:'client', clientId:'c' }
+  const general = { ...custom, id:'custom.00000000-0000-4000-8000-000000000002', scope:'general', clientId:undefined }
+  assert.equal(validCustomAction(custom),true)
+  assert.equal(validCustomAction({...general,clientId:'c'}),false)
+  assert.equal(validCustomAction({...custom,id:'meta.ad.created'}),false)
+  assert.equal(validCustomAction({...custom,label:'  '}),false)
+  assert.deepEqual(availableCustomActions([custom,general],'other'),[general])
+  assert.equal(availableCustomActions([custom,general],'c').length,2)
+  const entry = {...manual,typeId:custom.id,customDefinition:custom}
+  assert.equal(validReviewActions([entry]),true)
+  assert.equal(validReviewActions([{...entry,customDefinition:undefined}]),false)
+  assert.equal(validReviewActions([{...entry,typeId:general.id}]),false)
+  assert.equal(validReviewActions([{...manual,customDefinition:custom}]),false)
+  assert.match(describeReviewActions({actions:'',actionEntries:[entry]}),/Meta · Actualicé el catálogo: 3/)
+})
+
+test('scheduled publications have their own type and weekday summary', () => {
+  const post = {...manual,typeId:'meta.post.scheduled',scheduledDays:['fri','wed']}
+  assert.equal(validReviewActions([post]),true)
+  assert.equal(validReviewActions([{...post,scheduledDays:[]}]),false)
+  assert.match(describeReviewActions({actions:'',actionEntries:[post]}),/Programé publicación: 3 · para miércoles, viernes/)
+  assert.equal(storyDaysLabel([{actionEntries:[post]}],true,'meta.post.scheduled'),'Mié · Vie')
+})
 
 test('scheduled stories carry explicit unique weekdays and render in canonical order',()=>{
   const story={...manual,typeId:'meta.story.scheduled',scheduledDays:['thu','mon']}

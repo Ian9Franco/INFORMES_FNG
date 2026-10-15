@@ -56,11 +56,13 @@ export default function NotebookReport({ store, week, month, mode, title, previe
       {mode === 'grilla' ? month ? <table><thead><tr><th>CLIENTE</th><th>REVISIONES</th><th>ACCIONES</th><th>ÚLTIMA REVISIÓN</th></tr></thead><tbody>{clients.filter(client => client.active || entries.some(review => review.clientId === client.id)).map(client => {
         const reviews = entries.filter(review => review.clientId === client.id).sort((a,b) => a.date.localeCompare(b.date))
         const scheduled = storyDaysLabel(reviews)
-        return <tr key={client.id}><td>{client.name}</td><td>{reviews.length}</td><td>{reviews.reduce((sum, review) => sum + (review.actionEntries ?? []).reduce((total, action) => total + action.quantity, 0), 0)}{scheduled ? <small className="story-cell-note">H: {scheduled}</small> : null}</td><td>{reviews.length ? format(reviews[reviews.length - 1].date) : '—'}</td></tr>
+        const posts = storyDaysLabel(reviews, true, 'meta.post.scheduled')
+        return <tr key={client.id}><td>{client.name}</td><td>{reviews.length}</td><td>{reviews.reduce((sum, review) => sum + (review.actionEntries ?? []).reduce((total, action) => total + action.quantity, 0), 0)}{scheduled ? <small className="story-cell-note">H: {scheduled}</small> : null}{posts ? <small className="story-cell-note">P: {posts}</small> : null}</td><td>{reviews.length ? format(reviews[reviews.length - 1].date) : '—'}</td></tr>
       })}</tbody></table> : <table><thead><tr><th>CLIENTE</th>{days.map((day, index) => <th key={day}>{weekdays[index]}<small>{format(day)}</small></th>)}</tr></thead><tbody>{active.map(client => <tr key={client.id}><td>{client.name}</td>{days.map(day => {
         const review = entries.find(review => review.clientId === client.id && review.date === day)
         const scheduled = storyDaysLabel(review ? [review] : [])
-        return <td key={day}>{review ? '✓' : '·'}{scheduled ? <small className="story-cell-note">H: {scheduled}</small> : null}</td>
+        const posts = storyDaysLabel(review ? [review] : [], true, 'meta.post.scheduled')
+        return <td key={day}>{review ? '✓' : '·'}{scheduled ? <small className="story-cell-note">H: {scheduled}</small> : null}{posts ? <small className="story-cell-note">P: {posts}</small> : null}</td>
       })}</tr>)}</tbody></table> : <>
         <p className="report-intro">{entries.length} revisiones realizadas · {new Set(entries.map(review => review.clientId)).size} clientes</p>
         {clients.map(client => {

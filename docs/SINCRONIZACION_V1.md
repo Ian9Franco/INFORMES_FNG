@@ -5,7 +5,7 @@
 1. Recargar la web en PC y móvil para usar la nueva versión.
 2. Ingresar con el **mismo correo** en ambos dispositivos. Se admite magic link o contraseña de Supabase.
 3. Abrir primero el dispositivo donde están los registros previos. La primera cuenta importa sus datos locales; si otro dispositivo ya inicializó la nube, usar **Unir registros de este dispositivo**. La unión añade revisiones faltantes sin reemplazar las existentes.
-4. Guardar una revisión y esperar **Guardado y sincronizado**. El otro dispositivo recibe el cambio. Al volver a primer plano recupera el período visible.
+4. Guardar una revisión y esperar **DB activa** en la cabecera. El menú de cuenta explica el estado y permite actualizar manualmente. El otro dispositivo recibe el cambio. Al volver a primer plano recupera el período visible.
 5. En Informes seleccionar **Histórico mensual** y el mes. La planilla mensual muestra revisiones/acciones/última fecha por cliente; el detalle conserva notas y acciones.
 
 Las URL y la clave **publicable** del proyecto están en `.env.production`. No son credenciales de usuario ni service_role; toda operación requiere Auth y RLS. Se incluyen para que el push active la nube sin depender de variables ausentes en Vercel. Desarrollo continúa en modo local salvo que se configure `.env.local`.
@@ -14,7 +14,7 @@ Para magic links, configurar en Supabase Auth → URL Configuration el Site URL 
 
 ## Modelo real
 
-Se eligió un esquema compacto: `fng_records` guarda **una fila por entidad**, no un snapshot completo. `kind` distingue `client`, `review`, `task`, `closure`, `settings`, `event` y el tipo reservado `subscription`. Cada fila tiene propietario, ID histórico de texto, payload JSON de esa entidad, versión, tombstone, fecha indexada y timestamp del servidor.
+Se eligió un esquema compacto: `fng_records` guarda **una fila por entidad**, no un snapshot completo. `kind` distingue `client`, `action`, `review`, `task`, `closure`, `settings`, `event` y el tipo reservado `subscription`. Cada fila tiene propietario, ID histórico de texto, payload JSON de esa entidad, versión, tombstone, fecha indexada y timestamp del servidor. Las definiciones personalizadas (`action`) forman parte de metadata y usan la misma cola y canal Realtime, sin nuevas tablas ni polling.
 
 `fng_ad_accounts` vincula `(user_id, platform, external_id)` a un único cliente. La base valida cuentas, revisiones y acciones; conserva semanas cerradas y rechaza eliminar clientes con historial. `fng_apply_changes` realiza lotes atómicos y verifica `expectedVersion`. Las filas eliminadas usan tombstones para que todos los dispositivos reciban la eliminación.
 

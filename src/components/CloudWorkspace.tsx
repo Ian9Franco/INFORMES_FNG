@@ -9,13 +9,18 @@ import { supabase } from '../lib/supabase'
 import { SyncEngine, type SyncView } from '../sync/engine'
 import { recordKey, rowsStore, storeRecords, type Change, type RecordRow } from '../sync/records'
 import WorkspaceSkeleton from './WorkspaceSkeleton'
+import WorkspaceControls from './WorkspaceControls'
+import ThemeToggle from './ThemeToggle'
+import type { CustomAction } from '../review-actions'
 
 const columns = 'kind,id,payload,version,deleted,review_date,updated_at'
 
-export default function CloudWorkspace({ user }: { user: User }) {
+export default function CloudWorkspace({ user, onPassword, onSignOut }: { user: User; onPassword: () => void; onSignOut: () => Promise<void> }) {
   const [view, setView] = useState<SyncView | null>(null)
   const [failure, setFailure] = useState('')
   const [loadingPeriod, setLoadingPeriod] = useState(false)
+  const [online, setOnline] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [ready, setReady] = useState(false)
   const [legacyImported, setLegacyImported] = useState(false)
   const legacyLocal = useRef(load())
@@ -97,6 +102,7 @@ export default function CloudWorkspace({ user }: { user: User }) {
       })
     }
     const resume = () => {
+      setOnline(navigator.onLine)
       if (document.visibilityState === 'hidden') { if (channel) void client.removeChannel(channel); channel = null; return }
       connect()
       if (refreshTimer) clearTimeout(refreshTimer)
@@ -132,11 +138,14 @@ export default function CloudWorkspace({ user }: { user: User }) {
         setFailure(error instanceof Error ? error.message : String(error))
       }
     }
+    setOnline(navigator.onLine)
+    const offline = () => setOnline(false)
+    window.addEventListener('offline', offline)
     void start()
     document.addEventListener('visibilitychange', resume)
     window.addEventListener('online', resume)
     window.addEventListener('focus', resume)
-    return () => { alive = false; sync.dispose(); engine.current = null; if (refreshTimer) clearTimeout(refreshTimer); if (channel) void client.removeChannel(channel); document.removeEventListener('visibilitychange', resume); window.removeEventListener('online', resume); window.removeEventListener('focus', resume) }
+    return () => { window.removeEventListener('offline', offline); alive = false; sync.dispose(); engine.current = null; if (refreshTimer) clearTimeout(refreshTimer); if (channel) void client.removeChannel(channel); document.removeEventListener('visibilitychange', resume); window.removeEventListener('online', resume); window.removeEventListener('focus', resume) }
   }, [client, userId, read, fetchPeriod])
 
   const onChange = useCallback((store: Store) => engine.current?.edit(store), [])
@@ -155,9 +164,23 @@ export default function CloudWorkspace({ user }: { user: User }) {
         if (match) mapping.set(client.id, match.id)
         else { remote.clients.push(client); mapping.set(client.id, client.id) }
       }
+      const actionMapping = new Map<string, CustomAction>()
+      remote.customActions ??= []
+      for (const definition of old.customActions ?? []) {
+        const clientId = definition.scope === 'client' ? mapping.get(definition.clientId!) : undefined
+        if (definition.scope === 'client' && !clientId) continue
+        const remapped = { ...definition, ...(clientId ? { clientId } : {}) }
+        const existing = remote.customActions.find(item => item.id === definition.id || item.platform === definition.platform && item.scope === definition.scope && item.clientId === clientId && item.label.toLocaleLowerCase() === definition.label.toLocaleLowerCase())
+        if (!existing) remote.customActions.push(remapped)
+        actionMapping.set(definition.id, existing ?? remapped)
+      }
       for (const review of old.reviews) {
         const clientId = mapping.get(review.clientId)
-        if (clientId && !remote.reviews.some(existing => existing.id === review.id || (existing.clientId === clientId && existing.date === review.date))) remote.reviews.push({ ...review, clientId })
+        const actionEntries = review.actionEntries?.map(entry => {
+          const definition = actionMapping.get(entry.typeId)
+          return definition ? { ...entry, typeId: definition.id, customDefinition: definition } : entry
+        })
+        if (clientId && !remote.reviews.some(existing => existing.id === review.id || (existing.clientId === clientId && existing.date === review.date))) remote.reviews.push({ ...review, clientId, ...(actionEntries ? { actionEntries } : {}) })
       }
       for (const task of old.pending) { const clientId = mapping.get(task.clientId); if (clientId && !remote.pending.some(existing => existing.id === task.id)) remote.pending.push({ ...task, clientId }) }
       remote.closed = [...new Set([...remote.closed, ...old.closed])]
@@ -166,11 +189,18 @@ export default function CloudWorkspace({ user }: { user: User }) {
       if (!engine.current?.queued.size) { setLegacyImported(true); localStorage.setItem(`fng-legacy-imported:${userId}`, 'true') }
     } catch (error) { setFailure(String(error)) }
   }, [read, userId])
-  if (!view) return failure ? <main className="auth-shell"><div className="auth-card"><h1>No se pudo abrir la nube</h1><p role="alert">{failure}</p><button onClick={() => location.reload()}>Reintentar</button></div></main> : <WorkspaceSkeleton />
+  const refreshNow = useCallback(async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    try { engine.current?.receive(await read('metadata')); await fetchPeriod(range.current.start, range.current.end, true); setReady(true); setFailure(''); await engine.current?.flush() }
+    catch (error) { setFailure(String(error)) }
+    finally { setRefreshing(false) }
+  }, [refreshing, read, fetchPeriod])
+  if (!view) return failure ? <><header className="app-navigation screen"><div className="wordmark"><strong>Informes FNG</strong></div><div /><div className="navigation-tools"><ThemeToggle /><WorkspaceControls email={user.email} state="error" failure={failure} loading={refreshing} onRefresh={() => location.reload()} onPassword={onPassword} onSignOut={onSignOut} /></div></header><main className="auth-shell"><div className="auth-card"><h1>No se pudo abrir la nube</h1><p role="alert">{failure}</p><button onClick={() => location.reload()}>Reintentar</button></div></main></> : <WorkspaceSkeleton />
   return <>
-    <div className="sync-bar screen" role="status"><span>{view.state === 'saved' ? 'Guardado y sincronizado' : view.state === 'pending' ? 'Guardando cambios…' : view.state === 'conflict' ? 'Hay cambios para resolver' : 'Cambios pendientes de sincronizar'}</span>{loadingPeriod ? <span>Cargando período…</span> : null}{failure || view.message ? <span>{view.message || failure}</span> : null}<button onClick={() => { setFailure(''); void fetchPeriod(range.current.start, range.current.end, true).then(() => engine.current?.flush()).catch(error => setFailure(String(error))) }}>Actualizar</button></div>
+
     {!legacyImported && !localStorage.getItem(`fng-legacy-imported:${userId}`) && (legacyLocal.current.reviews.length > 0 || legacyLocal.current.pending.length > 0) ? <section className="sync-conflicts screen"><p>Este dispositivo tiene registros anteriores. Podés unirlos a tu cuenta sin reemplazar las revisiones existentes en la nube.</p><button onClick={() => void mergeLegacy()} disabled={!ready}>Unir registros de este dispositivo</button></section> : null}
     {view.conflicts.length ? <section className="sync-conflicts screen" aria-label="Conflictos de sincronización">{view.conflicts.map(change => <div key={recordKey(change)}><p>Otro dispositivo cambió este registro: <strong>{String(change.payload.name ?? change.payload.date ?? change.payload.text ?? change.id)}</strong>. Tu versión permanece guardada.</p><button onClick={() => engine.current?.resolve(recordKey(change), false)}>Usar versión de la nube</button><button onClick={() => engine.current?.resolve(recordKey(change), true)}>Conservar mi versión</button></div>)}</section> : null}
-    <div inert={!ready}><App initialData={view.store} onChange={ready ? onChange : undefined} storageMode="cloud" userId={userId} onPeriodChange={changePeriod} onExport={exportAll} onImport={importAll} /></div>
+    <App readOnly={!ready} headerTools={<WorkspaceControls email={user.email} state={online ? view.state : 'offline'} failure={failure} message={view.message} loading={loadingPeriod || refreshing} onRefresh={() => void refreshNow()} onPassword={onPassword} onSignOut={onSignOut} />} initialData={view.store} onChange={ready ? onChange : undefined} storageMode="cloud" userId={userId} onPeriodChange={changePeriod} onExport={exportAll} onImport={importAll} />
   </>
 }
