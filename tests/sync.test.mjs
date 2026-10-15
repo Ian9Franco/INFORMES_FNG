@@ -6,6 +6,25 @@ import { changePriority, diffStore, monthBounds, rowsStore, samePayload, storeRe
 const row = (name = 'ALLEGRA', version = 1) => ({ kind: 'client', id: 'a', payload: { id: 'a', name, active: true }, version, deleted: false })
 const storage = () => { const map = new Map(); return { getItem: key => map.get(key) ?? null, setItem: (key,value) => map.set(key,value) } }
 
+test('manual sync waits for in-flight writes, drains batches and sends nothing when unchanged',async()=>{
+  let finish,calls=0
+  const engine=new SyncEngine({write:changes=>{calls++;return new Promise(resolve=>{finish=()=>resolve(changes.map(change=>({...change,version:2})))})},readKeys:async()=>[]},storage(),'sync',()=>{})
+  engine.hydrate([row()])
+  const next=rowsStore([row()]);next.clients[0].active=false;engine.edit(next)
+  const first=engine.flush(),all=engine.synchronize()
+  await Promise.resolve();assert.equal(calls,1)
+  finish();await first;await all
+  assert.equal(engine.queued.size,0)
+  await engine.synchronize();assert.equal(calls,1)
+  engine.dispose()
+})
+test('manual sync never reports success when the transport fails',async()=>{
+  const engine=new SyncEngine({write:async()=>{throw Error('Unavailable')},readKeys:async()=>[]},storage(),'sync',()=>{})
+  engine.hydrate([row()]);const next=rowsStore([row()]);next.clients[0].active=false;engine.edit(next)
+  await assert.rejects(engine.synchronize(),/Unavailable/)
+  assert.equal(engine.queued.size,1);engine.dispose()
+})
+
 test('custom definitions round-trip as individual records and precede dependent reviews', () => {
   const before=rowsStore([row()])
   const definition={id:'custom.00000000-0000-4000-8000-000000000001',label:'Actualicé catálogo',platform:'meta_ads',scope:'client',clientId:'a'}

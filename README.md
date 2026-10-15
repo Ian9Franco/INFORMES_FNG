@@ -66,7 +66,7 @@ En **Supabase Dashboard → Authentication → URL Configuration**, configurar e
 | `npm start` | Sirve la compilación de producción |
 | `npm run lint` | **Solo** ejecuta `tsc --noEmit`. No ejecuta ESLint |
 
-`npm test` verifica contratos, administración de catálogo, ausencia de IDs en el frontend y migraciones en PostgreSQL aislado. Los scripts `verify-private-catalog.mjs` y `verify-cloud.mjs` comprueban la UI y dos navegadores con backend simulado e IDs ficticios. El lockfile está versionado.
+`npm test` verifica contratos, plataformas, administración de catálogo, ausencia de IDs en el frontend y migraciones en PostgreSQL aislado. `verify-private-catalog.mjs`, `verify-materials.mjs` y `verify-cloud.mjs` comprueban la UI, geometría y sincronización con backend simulado e IDs ficticios. El lockfile está versionado.
 
 ## Base de datos y seguridad
 
@@ -101,8 +101,8 @@ La importación desde JSON requiere confirmación y restaura registros operativo
 ## Recorrido funcional
 
 1. **Mi jornada:** muestra progreso, clientes activos revisados/no revisados hoy y pendientes abiertos.
-2. **Semana:** matriz de lunes a sábado. Cada cliente puede tener **una revisión por fecha**, con campos de acciones y observaciones.
-3. **Clientes:** búsqueda y filtros, archivo/reactivación y exportación/importación JSON. Altas, bajas y cambios de cuentas sólo desde Supabase, siguiendo [la guía](docs/ADMINISTRAR_CLIENTES.md).
+2. **Semana:** matrices separadas Meta Ads / Google Ads, de lunes a sábado. Cada cliente tiene **una revisión por fecha y plataforma**, con acciones, observaciones y borradores independientes.
+3. **Clientes:** búsqueda y filtros, archivo/reactivación por plataforma y exportación/importación JSON. Altas, bajas y cambios de cuentas sólo desde Supabase, siguiendo [la guía](docs/ADMINISTRAR_CLIENTES.md).
 4. **Informes:** período semanal o histórico mensual; formatos **Simple** y **Detallado**, vista previa A4, PNG e impresión/guardado PDF. Los informes excluyen clientes archivados y eliminados.
 5. **Lunes:** se visualiza automáticamente la semana corriente limpia, independientemente de las anteriores. El cierre de la semana pasada es **manual**; no se genera ni se envía automáticamente el informe. Los pendientes sobreviven al cambio.
 

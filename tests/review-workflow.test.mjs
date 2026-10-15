@@ -9,7 +9,7 @@ test('Borradores do not confirm a review and are scoped by client/date',()=>{
   assert.equal(draftChanged({...draft,observations:'Una nota'}),true)
   assert.equal(draftChanged({...draft,pendingText:'Controlar presupuesto'}),true)
   const storage={getItem:()=>JSON.stringify({'a:2026-10-14':draft,invalid:{...draft,day:'bad'}})}
-  assert.deepEqual(Object.keys(readDrafts(storage,'key')),['a:2026-10-14'])
+  assert.deepEqual(Object.keys(readDrafts(storage,'key')),['a:2026-10-14:meta_ads'])
   assert.deepEqual(readDrafts({getItem:()=>'{broken'},'key'),{})
 })
 test('Undo signatures permit save acknowledgements but reject other edits',()=>{

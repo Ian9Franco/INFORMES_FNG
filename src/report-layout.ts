@@ -17,7 +17,7 @@ export function compactReviewText(review: Review): string {
   }).filter(Boolean)
   if (review.actions.trim()) lines.push(review.actions.trim())
   if (review.observations.trim()) lines.push(`Observaciones · ${review.observations.trim()}`)
-  return lines.join('\n') || 'Revisado sin cambios'
+  return lines.join('\n') || `${review.platform ? `${review.platform === 'meta_ads' ? 'Meta' : 'Google'} · ` : ''}Revisado sin cambios`
 }
 
 /** Measured physical pagination: never scale type or drop overflow. */

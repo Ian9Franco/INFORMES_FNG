@@ -63,12 +63,12 @@
   .story-day-menu [role='checkbox']:disabled { opacity: 1; cursor: default; }
   .story-days-done { width: 100%; min-height: 44px; margin-top: 10px; border: 0; border-radius: 14px; color: var(--paper); background: var(--accent); font-weight: 600; }
   .site-footer { max-width: 1760px; padding-inline: clamp(20px,2.5vw,44px); }
-  :is(.primary-button,.secondary-button,.one-touch-review,.quick-register,.available-action-tags button,.action-quantity button,.theme-toggle,.story-day-trigger,.story-day-menu button,.segmented button) { transform-origin: center; transition: scale .36s cubic-bezier(.34,1.56,.64,1),background-color .18s ease,color .18s ease,box-shadow .18s ease; }
-  :is(.primary-button,.secondary-button,.one-touch-review,.quick-register,.available-action-tags button,.action-quantity button,.theme-toggle,.story-day-trigger,.story-day-menu button,.segmented button):active:not(:disabled) { transform: none; scale: 1.04 .9; }
+  :is(.primary-button,.secondary-button,.available-action-tags button,.action-quantity button,.theme-toggle,.story-day-trigger,.story-day-menu button,.segmented button) { transform-origin: center; transition: scale .36s cubic-bezier(.34,1.56,.64,1),background-color .18s ease,color .18s ease,box-shadow .18s ease; }
+  :is(.primary-button,.secondary-button,.available-action-tags button,.action-quantity button,.theme-toggle,.story-day-trigger,.story-day-menu button,.segmented button):active:not(:disabled) { transform: none; scale: 1.04 .9; }
 }
 @media screen and (hover:hover) and (prefers-reduced-motion:no-preference) {
   .review-item:hover:not(.is-expanded) { background: color-mix(in srgb,var(--surface-soft) 48%,transparent); }
-  :is(.primary-button,.secondary-button,.one-touch-review,.quick-register,.available-action-tags button,.theme-toggle,.story-day-trigger,.story-day-menu button,.segmented button):hover:not(:disabled) { animation: soft-squish .52s ease both; }
+  :is(.primary-button,.secondary-button,.available-action-tags button,.theme-toggle,.story-day-trigger,.story-day-menu button,.segmented button):hover:not(:disabled) { animation: soft-squish .52s ease both; }
 }
 @media screen and (max-width:1050px) {
   .daily-overview { grid-template-columns: 1fr; gap: 14px; }
@@ -112,7 +112,7 @@
 }
 @keyframes soft-squish { 0% { scale: 1; } 35% { scale: 1.035 .97; } 65% { scale: .99 1.025; } 100% { scale: 1.01; } }
 @media screen {
-  :is(.primary-button,.secondary-button,.one-touch-review,.quick-register,.available-action-tags button,.action-quantity button,.theme-toggle,.story-day-trigger,.story-day-menu button,.segmented button):active:not(:disabled) { animation: none; }
+  :is(.primary-button,.secondary-button,.available-action-tags button,.action-quantity button,.theme-toggle,.story-day-trigger,.story-day-menu button,.segmented button):active:not(:disabled) { animation: none; }
 }
 @keyframes picker-jelly { from { opacity: 0; scale: .94 .9; } 65% { opacity: 1; scale: 1.015 1.025; } to { opacity: 1; scale: 1; } }
 @media (prefers-reduced-motion:reduce) {

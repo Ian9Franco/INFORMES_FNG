@@ -11,7 +11,6 @@ import { SyncEngine, type SyncView } from '../sync/engine'
 import { recordKey, rowsStore, storeRecords, type Change, type RecordRow } from '../sync/records'
 import WorkspaceSkeleton from './WorkspaceSkeleton'
 import WorkspaceControls from './WorkspaceControls'
-import ThemeToggle from './ThemeToggle'
 import type { CustomAction } from '../review-actions'
 
 const columns = 'kind,id,payload,version,deleted,review_date,updated_at'
@@ -169,7 +168,7 @@ export default function CloudWorkspace({ user, onPassword, onSignOut }: { user: 
           const definition = actionMapping.get(entry.typeId)
           return definition ? { ...entry, typeId: definition.id, customDefinition: definition } : entry
         })
-        if (clientId && !remote.reviews.some(existing => existing.id === review.id || (existing.clientId === clientId && existing.date === review.date))) remote.reviews.push({ ...review, clientId, ...(actionEntries ? { actionEntries } : {}) })
+        if (clientId && !remote.reviews.some(existing => existing.id === review.id || (existing.clientId === clientId && existing.date === review.date && existing.platform === review.platform))) remote.reviews.push({ ...review, clientId, ...(actionEntries ? { actionEntries } : {}) })
       }
       for (const task of old.pending) { const clientId = mapping.get(task.clientId); if (clientId && !remote.pending.some(existing => existing.id === task.id)) remote.pending.push({ ...task, clientId }) }
       remote.closed = [...new Set([...remote.closed, ...old.closed])]
@@ -185,11 +184,19 @@ export default function CloudWorkspace({ user, onPassword, onSignOut }: { user: 
     catch (error) { setFailure(String(error)) }
     finally { setRefreshing(false) }
   }, [refreshing, read, fetchPeriod])
-  if (!view) return failure ? <><header className="app-navigation screen"><div className="wordmark"><strong>Informes FNG</strong></div><div /><div className="navigation-tools"><ThemeToggle /><WorkspaceControls email={user.email} state="error" failure={failure} loading={refreshing} onRefresh={() => location.reload()} onPassword={onPassword} onSignOut={onSignOut} /></div></header><main className="auth-shell"><div className="auth-card"><h1>No se pudo abrir la nube</h1><p role="alert">{failure}</p><button onClick={() => location.reload()}>Reintentar</button></div></main></> : <WorkspaceSkeleton />
+  const syncNow = useCallback(async () => {
+    if(!engine.current || !navigator.onLine) throw Error('Sin conexión. Los cambios pendientes se conservan en este dispositivo.')
+    await engine.current.synchronize()
+    engine.current.receive(await read('metadata'))
+    await fetchPeriod(range.current.start,range.current.end,true)
+    await engine.current.synchronize()
+    setReady(true);setFailure('')
+  },[read,fetchPeriod])
+  if (!view) return failure ? <><header className="app-navigation screen"><div className="wordmark"><strong>Informes FNG</strong></div><div /><div className="navigation-tools"><WorkspaceControls email={user.email} state="error" failure={failure} loading={refreshing} onRefresh={() => location.reload()} onPassword={onPassword} onSignOut={onSignOut} /></div></header><main className="auth-shell"><div className="auth-card"><h1>No se pudo abrir la nube</h1><p role="alert">{failure}</p><button onClick={() => location.reload()}>Reintentar</button></div></main></> : <WorkspaceSkeleton />
   return <>
 
     {!legacyImported && !localStorage.getItem(`fng-legacy-imported:${userId}`) && (legacyLocal.current.reviews.length > 0 || legacyLocal.current.pending.length > 0) ? <section className="sync-conflicts screen"><p>Este dispositivo tiene registros anteriores. Podés unirlos a tu cuenta sin reemplazar las revisiones existentes en la nube.</p><button onClick={() => void mergeLegacy()} disabled={!ready}>Unir registros de este dispositivo</button></section> : null}
     {view.conflicts.length ? <section className="sync-conflicts screen" aria-label="Conflictos de sincronización">{view.conflicts.map(change => <div key={recordKey(change)}><p>Otro dispositivo cambió este registro: <strong>{String(change.payload.name ?? change.payload.date ?? change.payload.text ?? change.id)}</strong>. Tu versión permanece guardada.</p><button onClick={() => engine.current?.resolve(recordKey(change), false)}>Usar versión de la nube</button><button onClick={() => engine.current?.resolve(recordKey(change), true)}>Conservar mi versión</button></div>)}</section> : null}
-    <App readOnly={!ready} headerTools={<WorkspaceControls email={user.email} state={online ? view.state : 'offline'} failure={failure} message={view.message} loading={loadingPeriod || refreshing} onRefresh={() => void refreshNow()} onPassword={onPassword} onSignOut={onSignOut} />} initialData={view.store} onChange={ready ? onChange : undefined} storageMode="cloud" userId={userId} onPeriodChange={changePeriod} onExport={exportAll} onImport={importAll} />
+    <App onSync={syncNow} readOnly={!ready} headerTools={<WorkspaceControls email={user.email} state={online ? view.state : 'offline'} failure={failure} message={view.message} loading={loadingPeriod || refreshing} onRefresh={() => void refreshNow()} onPassword={onPassword} onSignOut={onSignOut} />} initialData={view.store} onChange={ready ? onChange : undefined} storageMode="cloud" userId={userId} onPeriodChange={changePeriod} onExport={exportAll} onImport={importAll} />
   </>
 }

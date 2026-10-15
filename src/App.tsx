@@ -12,7 +12,8 @@ import { formatAccountId } from './account-catalog'
 import { sortClients, withManagedClients } from './clients'
 import { ExternalLink } from 'lucide-react'
 import { monthBounds, samePayload } from './sync/records'
-import CompanionAccess from './components/CompanionAccess'
+import { activePlatforms, clientPlatforms, platformActive, platformLabel, PLATFORMS, scopedReviews, togglePlatform } from './platforms'
+import type { AdPlatform } from './data'
 import QuickActions from './components/QuickActions'
 import ReviewDetailsFields from './components/ReviewDetailsFields'
 import RapidReviewSection from './components/RapidReviewSection'
@@ -86,7 +87,7 @@ function EmptyState({ icon, title, text }: { icon: IconName; title: string; text
   return <div className="empty-state"><span><Icon name={icon} size={22} /></span><h3>{title}</h3><p>{text}</p></div>
 }
 
-export default function App({ initialData, onChange, storageMode = 'local', userId, onPeriodChange, onExport, onImport, headerTools, readOnly = false }: { readOnly?: boolean; headerTools?: React.ReactNode; initialData?: Store; onChange?: (data: Store) => void; storageMode?: 'local' | 'cloud'; userId?: string; onPeriodChange?: (start: string, end: string) => void; onExport?: () => Promise<Store>; onImport?: (store: Store) => Promise<void> }) {
+export default function App({ initialData, onChange, storageMode = 'local', userId, onPeriodChange, onExport, onImport, onSync, headerTools, readOnly = false }: { onSync?: () => Promise<void>; readOnly?: boolean; headerTools?: React.ReactNode; initialData?: Store; onChange?: (data: Store) => void; storageMode?: 'local' | 'cloud'; userId?: string; onPeriodChange?: (start: string, end: string) => void; onExport?: () => Promise<Store>; onImport?: (store: Store) => Promise<void> }) {
   const [db, setDbState] = useState<Store>(() => { const store = initialData ?? load(); return { ...store, clients: sortClients(store.clients) } })
   const { confirm, confirmation } = useConfirmation()
   const dbRef = useRef(db)
@@ -107,7 +108,8 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const [reportMonth, setReportMonth] = useState(() => keyDate(new Date()).slice(0, 7))
   const remoteRef = useRef(initialData)
   const formRevision = useRef<number | undefined>(undefined)
-  const [selected, setSelected] = useState<{ id: string; day: string; mode: 'inline' | 'modal' } | null>(null)
+  const [selected, setSelected] = useState<{ id: string; day: string; platform: AdPlatform; mode: 'inline' | 'modal' } | null>(null)
+  const [syncingReport, setSyncingReport] = useState(false)
   const formBase = useRef<Review | undefined>(undefined)
   const draftStorageKey = `fng-review-drafts:v1:${userId ?? 'local'}`
   const [drafts, setDrafts] = useState<ReviewDrafts>(() => { try { return readDrafts(localStorage, draftStorageKey) } catch { return {} } })
@@ -143,22 +145,24 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const today = keyDate(new Date())
   const days = weekDays(week)
   const clients = useMemo(() => sortClients(db.clients), [db.clients])
-  const active = clients.filter(clientItem => clientItem.active)
+  const active = clients.filter(clientItem => activePlatforms(clientItem).length)
+  const reviews = useMemo(() => scopedReviews(db.reviews,db.clients), [db.reviews,db.clients])
+  const targetsToday = active.reduce((sum,client) => sum + activePlatforms(client).length,0)
   const closed = db.closed.includes(week)
-  const inWeek = db.reviews.filter(reviewItem => days.includes(reviewItem.date))
+  const inWeek = reviews.filter(reviewItem => days.includes(reviewItem.date))
   const monthRange = monthBounds(reportMonth)
   const reportStore = useMemo(() => activeReportStore(db), [db])
   const reportReviews = reportStore.reviews.filter(review => reportPeriod === 'month' ? review.date >= monthRange.start && review.date < monthRange.end : days.includes(review.date))
   const reportPending = reportStore.pending.filter(item => !item.resolved)
-  const pending = db.pending.filter(item => !item.resolved)
-  const reviewsToday = active.filter(clientItem => db.reviews.some(reviewItem => reviewItem.clientId === clientItem.id && reviewItem.date === today)).length
-  const completion = active.length ? Math.round((reviewsToday / active.length) * 100) : 0
-  const current = selected ? db.reviews.find(reviewItem => reviewItem.clientId === selected.id && reviewItem.date === selected.day) : undefined
+  const pending = reportStore.pending.filter(item => !item.resolved)
+  const reviewsToday = active.reduce((sum,client) => sum + activePlatforms(client).filter(platform => reviews.some(review => review.clientId === client.id && review.date === today && review.platform === platform)).length,0)
+  const completion = targetsToday ? Math.round((reviewsToday / targetsToday) * 100) : 0
+  const current = selected ? reviews.find(reviewItem => reviewItem.clientId === selected.id && reviewItem.date === selected.day && reviewItem.platform === selected.platform) : undefined
   const client = selected ? db.clients.find(clientItem => clientItem.id === selected.id) : undefined
   const weekLabel = `${format(days[0])} al ${format(days[5])} de ${date(days[5]).getFullYear()}`
   const reportLabel = reportPeriod === 'month' ? new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(date(monthRange.start)) : `Semana del ${weekLabel}`
   const longToday = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
-  const dailyClients = active.filter(item => item.name.toLocaleLowerCase('es').includes(dailySearch.trim().toLocaleLowerCase('es')) && (dailyFilter === 'todos' || db.reviews.some(review => review.clientId === item.id && review.date === today) === (dailyFilter === 'revisados')))
+  const dailyClients = active.filter(item => item.name.toLocaleLowerCase('es').includes(dailySearch.trim().toLocaleLowerCase('es')))
 
   function updateDraft(key: string, draft: ReviewDrafts[string] | null) {
     if (!draft && !draftsRef.current[key]) return
@@ -172,8 +176,8 @@ export default function App({ initialData, onChange, storageMode = 'local', user
 
   function stashDraft() {
     if (!selected || closingReview) return
-    const draft = { clientId: selected.id, day: selected.day, base: formBase.current, actions, observations, actionEntries, pendingText, updatedAt: new Date().toISOString() }
-    if (selected.id) updateDraft(draftKey(selected.id, selected.day), draftChanged(draft) ? draft : null)
+    const draft = { clientId: selected.id, day: selected.day, platform: selected.platform, base: formBase.current, actions, observations, actionEntries, pendingText, updatedAt: new Date().toISOString() }
+    if (selected.id) updateDraft(draftKey(selected.id, selected.day, selected.platform), draftChanged(draft) ? draft : null)
   }
 
   useEffect(() => { stashDraft() }, [selected, actions, observations, actionEntries, pendingText, closingReview])
@@ -279,9 +283,8 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const filteredClients = useMemo(() => {
     const query = clientSearch.trim().toLocaleLowerCase('es')
     return clients.filter(clientItem => {
-      const matchesState = clientFilter === 'todos' || (clientFilter === 'activos' ? clientItem.active : !clientItem.active)
       const searchable = `${clientItem.name} ${clientItem.advertisingAccounts?.map(account => `${account.owner} ${account.accountId}`).join(' ') ?? ''}`.toLocaleLowerCase('es')
-      return matchesState && (!query || searchable.includes(query))
+      return !query || searchable.includes(query)
     })
   }, [clientFilter, clientSearch, clients])
 
@@ -301,22 +304,24 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     return () => window.clearTimeout(timer)
   }, [notice])
 
-  function findReview(clientId: string, day: string) {
-    return db.reviews.find(reviewItem => reviewItem.clientId === clientId && reviewItem.date === day)
+  function findReview(clientId: string, day: string, platform: AdPlatform = selected?.platform ?? 'meta_ads') {
+    return reviews.find(reviewItem => reviewItem.clientId === clientId && reviewItem.date === day && reviewItem.platform === platform)
   }
 
-  function openReview(clientId: string, day: string, mode: 'inline' | 'modal' = 'modal', discardDraft = false) {
+  function openReview(clientId: string, day: string, mode: 'inline' | 'modal' = 'modal', discardDraft = false, platform: AdPlatform = selected?.platform ?? 'meta_ads') {
+    const target = dbRef.current.clients.find(client => client.id === clientId)
+    if (target && !platformActive(target,platform)) { setNotice('Esta cuenta está archivada en la plataforma seleccionada. Reactivala desde Clientes.'); return }
     if (db.closed.includes(monday(date(day)))) {
       setNotice('Semana cerrada. Reabrila desde Semana para editar.')
       return
     }
     stashDraft()
-    if (discardDraft) updateDraft(draftKey(clientId, day), null)
-    const reviewItem = dbRef.current.reviews.find(item => item.clientId === clientId && item.date === day)
-    const draft = discardDraft ? undefined : draftsRef.current[draftKey(clientId, day)]
+    if (discardDraft) updateDraft(draftKey(clientId, day,platform), null)
+    const reviewItem = scopedReviews(dbRef.current.reviews,dbRef.current.clients).find(item => item.clientId === clientId && item.date === day && item.platform === platform)
+    const draft = discardDraft ? undefined : draftsRef.current[draftKey(clientId, day,platform)]
     formBase.current = draft ? draft.base : reviewItem
     formRevision.current = formBase.current?.revision
-    setSelected({ id: clientId, day, mode })
+    setSelected({ id: clientId, day, mode, platform })
     setActions(draft?.actions ?? reviewItem?.actions ?? '')
     setActionEntries(draft?.actionEntries ?? (validReviewActions(reviewItem?.actionEntries) ? reviewItem.actionEntries : []))
     setObservations(draft?.observations ?? reviewItem?.observations ?? '')
@@ -328,11 +333,13 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   function saveReview(andNext = false) {
     if (!selected?.id || closingReview || db.closed.includes(monday(date(selected.day))) || !validReviewActions(actionEntries)) return
     if (actionEntries.some(entry => entry.customDefinition && (entry.customDefinition.scope === 'client' && entry.customDefinition.clientId !== selected.id || !dbRef.current.customActions?.some(definition => definition.id === entry.typeId)))) { setError('Una acción no está disponible para este cliente. Quitala y seleccioná una del catálogo.'); return }
-    const previous = dbRef.current.reviews.find(item => item.clientId === selected.id && item.date === selected.day)
+    const group = scopedReviews(dbRef.current.reviews.filter(item => item.clientId === selected.id && item.date === selected.day),dbRef.current.clients)
+    const previous = group.find(item => item.platform === selected.platform)
     if (previous?.revision !== formRevision.current || reviewSignature(previous) !== reviewSignature(formBase.current)) { setNotice('Esta revisión cambió en otro dispositivo. Tu borrador está conservado; copiá tus notas y cargá la versión actual antes de guardar.'); return }
     const item: Review = {
       id: previous?.id ?? uid(),
       clientId: selected.id,
+      platform: selected.platform,
       date: selected.day,
       createdAt: previous?.createdAt ?? new Date().toISOString(),
       actions: actions.trim(),
@@ -342,14 +349,14 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     }
     setDb(currentDb => ({
       ...currentDb,
-      reviews: [...currentDb.reviews.filter(reviewItem => reviewItem.clientId !== selected.id || reviewItem.date !== selected.day), item],
-      pending: pendingText.trim() ? [...currentDb.pending, { id: uid(), clientId: selected.id, text: pendingText.trim(), resolved: false }] : currentDb.pending,
+      reviews: [...currentDb.reviews.filter(reviewItem => reviewItem.clientId !== selected.id || reviewItem.date !== selected.day), ...group.filter(review => review.platform !== selected.platform), item],
+      pending: pendingText.trim() ? [...currentDb.pending, { id: uid(), clientId: selected.id, platform: selected.platform, text: pendingText.trim(), resolved: false }] : currentDb.pending,
     }))
-    updateDraft(draftKey(selected.id, selected.day), null)
-    const next = andNext ? nextPendingClient(tab === 'jornada' ? dailyClients : active, dbRef.current.reviews, selected.day, selected.id) : undefined
+    updateDraft(draftKey(selected.id, selected.day,selected.platform), null)
+    const next = andNext ? nextPendingClient((tab === 'jornada' ? dailyClients : active).filter(client => platformActive(client,selected.platform)), scopedReviews(dbRef.current.reviews,dbRef.current.clients).filter(review => review.platform === selected.platform), selected.day, selected.id) : undefined
     if (next) {
       // Reset the saved form before opening the next client; never re-stash it.
-      const draft = draftsRef.current[draftKey(next.id, selected.day)]
+      const draft = draftsRef.current[draftKey(next.id, selected.day,selected.platform)]
       formBase.current = draft?.base
       formRevision.current = draft?.base?.revision
       setSelected({ ...selected, id: next.id })
@@ -358,7 +365,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
       if (selected.mode === 'inline') {
         if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current)
         rowScrollTimer.current = setTimeout(() => {
-        const row = document.querySelector<HTMLElement>(`.review-item[data-client-id="${CSS.escape(next.id)}"]`)
+        const row = document.querySelector<HTMLElement>(`.review-item[data-client-id="${CSS.escape(next.id)}"][data-platform="${selected.platform}"]`)
         row?.scrollIntoView({ block: 'start', behavior: calm ? 'instant' : 'smooth' })
         row?.querySelector<HTMLButtonElement>('.review-row')?.focus({ preventScroll: true })
         }, calm ? 0 : 220)
@@ -368,10 +375,11 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     setNotice(previous ? 'Revisión actualizada' : 'Revisión registrada')
   }
 
-  function reviewWithoutChanges(clientId: string) {
-    if (dbRef.current.closed.includes(monday(date(today))) || dbRef.current.reviews.some(item => item.clientId === clientId && item.date === today) || draftsRef.current[draftKey(clientId, today)]) return
-    const item: Review = { id: uid(), clientId, date: today, createdAt: new Date().toISOString(), actions: '', observations: '', actionSchemaVersion: ACTION_SCHEMA_VERSION, actionEntries: [] }
-    setDb(currentDb => ({ ...currentDb, reviews: [...currentDb.reviews, item] }))
+  function reviewWithoutChanges(clientId: string, platform: AdPlatform) {
+    const group = scopedReviews(dbRef.current.reviews.filter(item => item.clientId === clientId && item.date === today),dbRef.current.clients)
+    if (dbRef.current.closed.includes(monday(date(today))) || group.some(item => item.platform === platform) || draftsRef.current[draftKey(clientId, today,platform)]) return
+    const item: Review = { id: uid(), clientId, platform, date: today, createdAt: new Date().toISOString(), actions: '', observations: '', actionSchemaVersion: ACTION_SCHEMA_VERSION, actionEntries: [] }
+    setDb(currentDb => ({ ...currentDb, reviews: [...currentDb.reviews.filter(review => review.clientId !== clientId || review.date !== today), ...group, item] }))
     setUndoReview(item)
   }
 
@@ -386,9 +394,10 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   async function removeReview() {
     if (!current) return
     if (!await confirm({ title: '¿Quitar esta revisión?', message: 'Las acciones y observaciones asociadas también se eliminarán.', accept: 'Eliminar revisión', danger: true })) return
-    if (reviewSignature(dbRef.current.reviews.find(item => item.id === current.id)) !== reviewSignature(current) || dbRef.current.closed.includes(monday(date(current.date)))) { setError('La revisión cambió o la semana se cerró. Volvé a abrirla antes de eliminar.'); return }
-    setDb(currentDb => ({ ...currentDb, reviews: currentDb.reviews.filter(reviewItem => reviewItem.id !== current.id) }))
-    if (selected) updateDraft(draftKey(selected.id, selected.day), null)
+    const group = scopedReviews(dbRef.current.reviews.filter(item => item.clientId === current.clientId && item.date === current.date),dbRef.current.clients)
+    if (reviewSignature(group.find(item => item.id === current.id)) !== reviewSignature(current) || dbRef.current.closed.includes(monday(date(current.date)))) { setError('La revisión cambió o la semana se cerró. Volvé a abrirla antes de eliminar.'); return }
+    setDb(currentDb => ({ ...currentDb, reviews: [...currentDb.reviews.filter(item => item.clientId !== current.clientId || item.date !== current.date), ...group.filter(item => item.id !== current.id)] }))
+    if (selected) updateDraft(draftKey(selected.id, selected.day,selected.platform), null)
     closeReview(true)
     setNotice('Revisión eliminada')
   }
@@ -397,7 +406,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     if (!selected?.id || !pendingText.trim()) return
     setDb(currentDb => ({
       ...currentDb,
-      pending: [...currentDb.pending, { id: uid(), clientId: selected.id, text: pendingText.trim(), resolved: false }],
+      pending: [...currentDb.pending, { id: uid(), clientId: selected.id, platform: selected.platform, text: pendingText.trim(), resolved: false }],
     }))
     setPendingText('')
     setNotice('Pendiente agregado')
@@ -421,12 +430,12 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   }
 
 
-  function toggleClient(clientItem: Client) {
+  function toggleClient(clientItem: Client, platform: AdPlatform) {
     setDb(currentDb => ({
       ...currentDb,
-      clients: currentDb.clients.map(item => item.id === clientItem.id ? { ...item, active: !item.active } : item),
+      clients: currentDb.clients.map(item => item.id === clientItem.id ? togglePlatform(item,platform) : item),
     }))
-    setNotice(clientItem.active ? 'Cliente archivado' : 'Cliente reactivado')
+    setNotice(`${platformLabel(platform)} · ${platformActive(clientItem,platform) ? 'cliente archivado' : 'cliente reactivado'}`)
   }
 
 
@@ -532,7 +541,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     jornada: { eyebrow: 'RESUMEN DIARIO', title: 'Mi jornada', description: 'Organizá las revisiones de hoy y resolvé tus pendientes.' },
     semana: { eyebrow: 'SEGUIMIENTO', title: 'Control semanal', description: 'Registrá el seguimiento diario de cada cliente.' },
     clientes: { eyebrow: 'CARTERA', title: 'Clientes', description: 'Administrá las cuentas que forman parte de tus informes.' },
-    informes: { eyebrow: 'ENTREGABLES', title: 'Informes', description: 'Prepará la planilla semanal o un reporte detallado.' },
+    informes: { eyebrow: 'ENTREGABLES', title: 'Informes', description: 'Prepará un informe semanal o mensual, simple o detallado.' },
   }
 
   const title = pageTitles[tab]
@@ -543,7 +552,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
       <LayoutGroup id="workspace-navigation"><nav aria-label="Navegación principal">
         {navItems.map(item => <motion.button whileHover={calm ? undefined : { scale: 1.035 }} whileTap={calm ? undefined : { scaleX: 1.06, scaleY: .9 }} transition={{ type: 'spring', stiffness: 450, damping: 18, mass: .55 }} key={item.id} aria-current={tab === item.id ? 'page' : undefined} className={tab === item.id ? 'active' : ''} onClick={() => navigate(item.id)}>{tab === item.id ? <NavigationIndicator /> : null}<span className="navigation-icon">{item.id === 'jornada' ? <AnimatedChart active={tab === item.id} /> : <Icon name={item.icon} />}</span><span className="navigation-label">{item.label}</span>{item.id === 'jornada' && pending.length > 0 ? <b>{pending.length}</b> : null}</motion.button>)}
       </nav></LayoutGroup>
-      <div className="navigation-tools"><ThemeToggle />{headerTools ?? <span className="storage-indicator">Guardado local</span>}</div>
+      <div className="navigation-tools">{headerTools ?? <><span className="storage-indicator">Guardado local</span><ThemeToggle /></>}</div>
     </header>
 
     <div className="notebook-pages screen" inert={readOnly}><AnimatePresence mode="wait" initial={false} custom={direction} onExitComplete={() => requestAnimationFrame(() => window.scrollTo({ top: scrollPositions.current[tab] ?? 0, behavior: 'instant' }))}>
@@ -557,15 +566,15 @@ export default function App({ initialData, onChange, storageMode = 'local', user
       {notice ? <div role="status" className="toast"><Icon name="check" />{notice}</div> : null}
 
       {tab === 'jornada' ? <>
-        {(db.activity ?? []).some(event => event.status === 'pending' && event.date === today) ? <section className={`panel activity-inbox ${showActivity ? 'is-open' : ''}`}><div className="panel-heading"><div><span className="section-kicker">COMPANION</span><h2>Actividad de tu PC</h2><p>Sesiones observadas; confirmá la revisión para completar el día.</p></div><button type="button" className="text-button" aria-expanded={showActivity} aria-controls="activity-records" onClick={() => setShowActivity(!showActivity)}>{showActivity ? 'Ocultar' : `Ver ${(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).length}`}<Icon name="chevron-right" size={15} /></button></div><div id="activity-records" hidden={!showActivity}>{(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).map(event => <article key={event.id}><div><strong>{clients.find(client => client.id === event.clientId)?.name ?? `Cuenta sin vincular: ${event.accountCandidate ?? 'sin ID'}`}</strong><p>{event.platform === 'meta_ads' ? 'Meta Ads' : 'Google Ads'} · {Math.floor(event.focusedMs / 60000)} min estimados · {event.navigationSignals} señales</p></div>{event.clientId ? <button className="secondary-button" onClick={() => openReview(event.clientId!, event.date)}>{findReview(event.clientId, event.date) ? 'Ver revisión' : 'Registrar revisión'}</button> : null}<button className="icon-button" aria-label="Descartar sesión" onClick={() => setDb(currentDb => ({ ...currentDb, activity: currentDb.activity?.map(item => item.id === event.id ? { ...item, status: 'dismissed' } : item) }))}><Icon name="close" /></button></article>)}</div></section> : null}
+        {(db.activity ?? []).some(event => event.status === 'pending' && event.date === today) ? <section className={`panel activity-inbox ${showActivity ? 'is-open' : ''}`}><div className="panel-heading"><div><span className="section-kicker">COMPANION</span><h2>Actividad de tu PC</h2><p>Sesiones observadas; confirmá la revisión para completar el día.</p></div><button type="button" className="text-button" aria-expanded={showActivity} aria-controls="activity-records" onClick={() => setShowActivity(!showActivity)}>{showActivity ? 'Ocultar' : `Ver ${(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).length}`}<Icon name="chevron-right" size={15} /></button></div><div id="activity-records" hidden={!showActivity}>{(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).map(event => <article key={event.id}><div><strong>{clients.find(client => client.id === event.clientId)?.name ?? `Cuenta sin vincular: ${event.accountCandidate ?? 'sin ID'}`}</strong><p>{event.platform === 'meta_ads' ? 'Meta Ads' : 'Google Ads'} · {Math.floor(event.focusedMs / 60000)} min estimados · {event.navigationSignals} señales</p></div>{event.clientId ? <button className="secondary-button" onClick={() => openReview(event.clientId!, event.date, 'modal', false, event.platform)}>{findReview(event.clientId, event.date, event.platform) ? 'Ver revisión' : 'Registrar revisión'}</button> : null}<button className="icon-button" aria-label="Descartar sesión" onClick={() => setDb(currentDb => ({ ...currentDb, activity: currentDb.activity?.map(item => item.id === event.id ? { ...item, status: 'dismissed' } : item) }))}><Icon name="close" /></button></article>)}</div></section> : null}
         <div className="daily-overview"><section className="hero-panel">
-          <div><span className="section-kicker">PROGRESO DEL DÍA</span><h2>{completion === 100 && active.length ? 'Jornada completa' : 'Seguimiento en curso'}</h2><p>{reviewsToday} de {active.length} clientes activos revisados.</p></div>
+          <div><span className="section-kicker">PROGRESO DEL DÍA</span><h2>{completion === 100 && active.length ? 'Jornada completa' : 'Seguimiento en curso'}</h2><p>{reviewsToday} de {targetsToday} cuentas activas revisadas.</p></div>
           <div className="progress-ring" style={{ '--progress': `${completion * 3.6}deg` } as React.CSSProperties}><span><b>{completion}%</b><small>completo</small></span></div>
         </section>
 
         <section className="metrics-grid" aria-label="Resumen de la jornada">
           <article><span className="metric-icon success"><Icon name="check" /></span><div><small>Revisados hoy</small><strong>{reviewsToday}</strong><p>Con registro confirmado</p></div></article>
-          <article><span className="metric-icon pending"><Icon name="clock" /></span><div><small>Por revisar</small><strong>{Math.max(0, active.length - reviewsToday)}</strong><p>Clientes activos restantes</p></div></article>
+          <article><span className="metric-icon pending"><Icon name="clock" /></span><div><small>Por revisar</small><strong>{Math.max(0, targetsToday - reviewsToday)}</strong><p>Cuentas activas restantes</p></div></article>
           <article><span className="metric-icon neutral"><Icon name="report" /></span><div><small>Pendientes abiertos</small><strong>{pending.length}</strong><p>Acciones para continuar</p></div></article>
         </section></div>
 
@@ -574,27 +583,28 @@ export default function App({ initialData, onChange, storageMode = 'local', user
             <div className="panel-heading"><div><span className="section-kicker">CUENTAS ACTIVAS</span><h2>Revisiones de hoy</h2></div><button className="text-button" onClick={() => navigate('semana')}>Ver semana <Icon name="chevron-right" /></button></div>
             <div className="search-box daily-search"><Icon name="search" /><input type="search" value={dailySearch} onChange={event => { if (selected?.mode === 'inline') closeReview(); setDailySearch(event.target.value) }} placeholder="Buscar en tus clientes" aria-label="Buscar en la jornada" /></div>
             <div className="segmented daily-filter" aria-label="Filtrar revisiones de hoy">{(['todos', 'pendientes', 'revisados'] as const).map(filter => <button key={filter} aria-pressed={dailyFilter === filter} className={dailyFilter === filter ? 'active' : ''} onClick={() => { if (selected?.mode === 'inline') closeReview(); setDailyFilter(filter) }}>{filter === 'todos' ? 'Todos' : filter === 'pendientes' ? 'Por revisar' : 'Revisados'}</button>)}</div>
-            {dailyClients.length ? <div className="review-list">{dailyClients.map(clientItem => {
-              const reviewItem = findReview(clientItem.id, today)
-              const expanded = selected?.mode === 'inline' && selected.id === clientItem.id && selected.day === today
-              const hasDraft = Boolean(drafts[draftKey(clientItem.id, today)])
+            {PLATFORMS.map(platform => <section key={platform} className="platform-section" aria-label={`Revisiones ${platformLabel(platform)}`}><header className="platform-section-heading"><h3>{platformLabel(platform)}</h3><span>{active.filter(client => platformActive(client,platform)).length} cuentas</span></header>
+            {dailyClients.some(client => platformActive(client,platform)) ? <div className="review-list">{dailyClients.filter(client => platformActive(client,platform) && (dailyFilter === 'todos' || Boolean(findReview(client.id,today,platform)) === (dailyFilter === 'revisados'))).map(clientItem => {
+              const reviewItem = findReview(clientItem.id, today,platform)
+              const expanded = selected?.mode === 'inline' && selected.id === clientItem.id && selected.day === today && selected.platform === platform
+              const hasDraft = Boolean(drafts[draftKey(clientItem.id, today,platform)])
               const dayClosed = db.closed.includes(monday(date(today)))
-              return <article key={clientItem.id} data-client-id={clientItem.id} className={`review-item ${expanded ? 'is-expanded' : ''}`}>
-              <div className="review-row-header"><button className="review-row" aria-expanded={expanded} aria-controls={`rapid-${clientItem.id}`} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline')}>
+              return <article key={clientItem.id} data-client-id={clientItem.id} data-platform={platform} className={`review-item ${expanded ? 'is-expanded' : ''}`}>
+              <div className="review-row-header"><button className="review-row" aria-expanded={expanded} aria-controls={`rapid-${platform}-${clientItem.id}`} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline',false,platform)}>
                 <ReviewState reviewed={Boolean(reviewItem)} />
                 <span className="review-name"><strong>{clientItem.name}</strong><small>{reviewItem ? `${storyDaysLabel([reviewItem]) ? `Historia → ${storyDaysLabel([reviewItem])} · ` : ''}${storyDaysLabel([reviewItem], true, 'meta.post.scheduled') ? `Publicación → ${storyDaysLabel([reviewItem], true, 'meta.post.scheduled')} · ` : ''}${describeReviewActions(reviewItem) || reviewItem.observations || 'Revisión registrada'}` : 'Todavía sin revisar'}</small></span>
                 <ReviewStateLabel reviewed={Boolean(reviewItem)} label={hasDraft ? 'Borrador' : reviewItem ? 'Revisado' : 'Pendiente'} />
                 <Icon name="chevron-right" />
               </button>
-              <div className="review-row-tools">{!reviewItem ? <button type="button" className="one-touch-review" disabled={dayClosed || hasDraft || expanded} onClick={() => reviewWithoutChanges(clientItem.id)} aria-label={`Revisado sin cambios: ${clientItem.name}`}><Icon name="check" size={15} /><span>Sin cambios</span></button> : null}<button type="button" className="quick-register" disabled={dayClosed} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline')} aria-label={`${expanded ? 'Cerrar registro' : reviewItem ? 'Editar revisión' : 'Registrar acciones'}: ${clientItem.name}`}>{expanded ? 'Cerrar' : hasDraft ? 'Continuar' : reviewItem ? 'Editar' : 'Registrar'}</button></div></div>
-              <AnimatePresence initial={false}>{expanded ? <RapidReviewSection id={`rapid-${clientItem.id}`} key="editor" label={`Registro rápido de ${clientItem.name}`} onKeyDown={reviewShortcut}>
+              <div className="review-row-tools"><button type="button" className={`one-touch-review ${reviewItem ? 'is-confirmed' : ''}`} aria-disabled={Boolean(reviewItem) || dayClosed || hasDraft || expanded} onClick={() => { if (!dayClosed && !hasDraft && !expanded && !reviewItem) reviewWithoutChanges(clientItem.id,platform) }} aria-label={`${reviewItem ? 'Revisión confirmada' : 'Revisado sin cambios'}: ${clientItem.name}`}><Icon name="check" size={15} /><span>{reviewItem ? 'Revisado' : 'Sin cambios'}</span></button><button type="button" className="quick-register" disabled={dayClosed} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline',false,platform)} aria-label={`${expanded ? 'Cerrar registro' : reviewItem ? 'Editar revisión' : 'Registrar acciones'}: ${clientItem.name}`}>{expanded ? 'Cerrar' : hasDraft ? 'Continuar' : reviewItem ? 'Editar' : 'Registrar'}</button></div></div>
+              <AnimatePresence initial={false}>{expanded ? <RapidReviewSection id={`rapid-${platform}-${clientItem.id}`} key="editor" label={`Registro rápido de ${clientItem.name}`} onKeyDown={reviewShortcut}>
                 <div className="rapid-review-heading"><span>Borrador en este dispositivo · confirmá para completar</span><button type="button" className="text-button" onClick={() => setSelected({ ...selected!, mode: 'modal' })}>Edición detallada <Icon name="chevron-right" size={14} /></button></div>
                 {reviewSignature(current) !== reviewSignature(formBase.current) ? <div className="draft-conflict" role="status">La revisión cambió. Conservamos tu borrador.<button type="button" onClick={reloadReview}>Cargar versión actual</button></div> : null}
-                <QuickActions clientId={selected?.id} catalog={db.customActions} onCreate={createAction} value={actionEntries} onChange={setActionEntries} compact storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
+                <QuickActions lockedPlatform={platform} clientId={selected?.id} catalog={db.customActions} onCreate={createAction} value={actionEntries} onChange={setActionEntries} compact storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
                 <details className="rapid-details"><summary>Notas y pendientes{actions || observations || pendingText ? ' · con contenido' : ' · opcional'}</summary><ReviewDetailsFields actions={actions} observations={observations} pendingText={pendingText} onActions={setActions} onObservations={setObservations} onPending={setPendingText} onAddPending={addPending} /></details>
               </RapidReviewSection> : null}</AnimatePresence>
               </article>
-            })}</div> : <EmptyState icon="users" title={active.length ? 'Sin coincidencias' : 'Todavía no hay clientes'} text={active.length ? 'Probá con otro nombre.' : 'Agregá tu primer cliente para comenzar el seguimiento.'} />}
+            })}</div> : <p className="platform-empty">Sin cuentas activas en esta plataforma.</p>}</section>)}
           </section>
 
           <section className="panel tasks-panel">
@@ -609,16 +619,15 @@ export default function App({ initialData, onChange, storageMode = 'local', user
 
       {tab === 'semana' ? <section className="panel week-panel">
         <div className="panel-heading week-heading"><div><div className="inline-title"><span className="section-kicker">SEMANA DEL</span>{closed ? <span className="closed-badge"><Icon name="lock" size={13} />Cerrada</span> : null}</div><h2>{weekLabel}</h2><p>{inWeek.length} revisiones registradas en este período.</p></div><WeekPicker label={weekLabel} onPrevious={() => changeWeek(-1)} onNext={() => changeWeek(1)} /></div>
-        <div className="table-scroll"><table className="week-table"><thead><tr><th>Cliente</th>{days.map((day, index) => <th key={day}><span>{weekdays[index]}</span><small>{format(day)}</small></th>)}</tr></thead><tbody>{active.map(clientItem => <tr key={clientItem.id}><th><span className="client-avatar">{clientItem.name.slice(0, 2)}</span><strong>{clientItem.name}</strong></th>{days.map(day => {
-          const reviewItem = findReview(clientItem.id, day)
-          return <td key={day}><button disabled={closed} className={reviewItem ? 'reviewed' : ''} onClick={() => openReview(clientItem.id, day)} aria-label={`Revisión de ${clientItem.name} para ${day}`}>{reviewItem ? <Icon name="check" /> : <Icon name="plus" size={15} />}</button></td>
-        })}</tr>)}</tbody></table></div>
+        {PLATFORMS.map(platform => <section className="platform-section" aria-label={`Semana ${platformLabel(platform)}`} key={platform}><header className="platform-section-heading"><h3>{platformLabel(platform)}</h3><span>{active.filter(client => platformActive(client,platform)).length} cuentas</span></header><div className="table-scroll"><table className="week-table"><thead><tr><th>Cliente</th>{days.map((day, index) => <th key={day}><span>{weekdays[index]}</span><small>{format(day)}</small></th>)}</tr></thead><tbody>{active.filter(client => platformActive(client,platform)).map(clientItem => <tr key={clientItem.id}><th><span className="client-avatar">{clientItem.name.slice(0, 2)}</span><strong>{clientItem.name}</strong></th>{days.map(day => {
+          const reviewItem = findReview(clientItem.id, day,platform)
+          return <td key={day}><button disabled={closed} className={reviewItem ? 'reviewed' : ''} onClick={() => openReview(clientItem.id, day,'modal',false,platform)} aria-label={`Revisión de ${clientItem.name} para ${day}`}>{reviewItem ? <Icon name="check" /> : <Icon name="plus" size={15} />}</button></td>
+        })}</tr>)}</tbody></table></div></section>)}
         {!active.length ? <EmptyState icon="users" title="No hay clientes activos" text="Reactivá un cliente archivado o administrá el catálogo desde la base de datos." /> : null}
         <div className="panel-footer"><p><span className="legend-dot reviewed" />Revisado <span className="legend-dot" />Sin revisar</p><div><button className="secondary-button" onClick={toggleWeekClosed}><Icon name={closed ? 'unlock' : 'lock'} />{closed ? 'Reabrir semana' : 'Cerrar semana'}</button><button className="primary-button" onClick={() => { setPrintMode('grilla'); navigate('informes') }}><Icon name="print" />Preparar informe</button></div></div>
       </section> : null}
 
       {tab === 'clientes' ? <>
-        {storageMode === 'cloud' ? <CompanionAccess /> : null}
         <section className="panel client-toolbar">
           <div><span className="section-kicker">CATÁLOGO ADMINISTRADO</span><p className="helper-text">Los clientes y sus cuentas se añaden, modifican o eliminan únicamente desde la base de datos. Acá podés archivarlos o reactivarlos sin perder su historial.</p></div>
           <div className="backup-actions"><span>Respaldo de datos</span><div><button className="secondary-button" onClick={exportBackup}><Icon name="download" />Exportar</button><label className="secondary-button file-button"><Icon name="upload" />Importar<input type="file" accept=".json,application/json" onChange={event => { const file = event.target.files?.[0]; if (file) importBackup(file); event.target.value = '' }} /></label></div></div>
@@ -626,30 +635,31 @@ export default function App({ initialData, onChange, storageMode = 'local', user
 
         <section className="panel clients-panel">
           <div className="clients-controls"><div className="search-box"><Icon name="search" /><input value={clientSearch} onChange={event => setClientSearch(event.target.value)} placeholder="Buscar cliente" aria-label="Buscar cliente" /></div><div className="segmented" aria-label="Filtrar clientes">{(['activos', 'archivados', 'todos'] as ClientFilter[]).map(filter => <button key={filter} className={clientFilter === filter ? 'active' : ''} onClick={() => setClientFilter(filter)}>{filter[0].toUpperCase() + filter.slice(1)}</button>)}</div></div>
-          <div className="client-list-header"><span>Cliente</span><span>Actividad</span><span>Estado</span><span>Acciones</span></div>
-          {filteredClients.length ? <div className="client-management-list">{filteredClients.map(clientItem => {
-            const reviewCount = db.reviews.filter(item => item.clientId === clientItem.id).length
-            const pendingCount = db.pending.filter(item => item.clientId === clientItem.id && !item.resolved).length
+          {PLATFORMS.map(platform => <section className="platform-section" aria-label={`Clientes ${platformLabel(platform)}`} key={platform}><header className="platform-section-heading"><h3>{platformLabel(platform)}</h3></header><div className="client-list-header"><span>Cliente</span><span>Actividad</span><span>Estado</span><span>Acciones</span></div>
+          {filteredClients.some(client => clientPlatforms(client).includes(platform) && (clientFilter === 'todos' || platformActive(client,platform) === (clientFilter === 'activos'))) ? <div className="client-management-list">{filteredClients.filter(client => clientPlatforms(client).includes(platform) && (clientFilter === 'todos' || platformActive(client,platform) === (clientFilter === 'activos'))).map(clientItem => {
+            const reviewCount = reviews.filter(item => item.clientId === clientItem.id && item.platform === platform).length
+            const pendingCount = db.pending.filter(item => item.clientId === clientItem.id && (!item.platform || item.platform === platform) && !item.resolved).length
             return <article key={clientItem.id} className="client-management-row">
-              <div className="client-identity"><span className="client-avatar large">{clientItem.name.slice(0, 2)}</span><div><strong>{clientItem.name}</strong>{clientItem.advertisingAccounts?.length ? clientItem.advertisingAccounts.map(account => <small key={`${account.platform}:${account.accountId}`} className="account-binding"><span>{account.owner}</span><button type="button" title="Copiar ID de cuenta publicitaria" onClick={() => { navigator.clipboard.writeText(account.accountId).then(() => setNotice('ID de cuenta copiado')).catch(() => setError('No se pudo copiar el ID.')) }}>{account.platform === 'google_ads' ? 'Google Ads' : 'Meta'} · {formatAccountId(account)}</button></small>) : <small>Sin cuenta publicitaria vinculada</small>}</div></div>
+              <div className="client-identity"><span className="client-avatar large">{clientItem.name.slice(0, 2)}</span><div><strong>{clientItem.name}</strong>{clientItem.advertisingAccounts?.length ? clientItem.advertisingAccounts.filter(account => account.platform === platform).map(account => <small key={`${account.platform}:${account.accountId}`} className="account-binding"><span>{account.owner}</span><button type="button" title="Copiar ID de cuenta publicitaria" onClick={() => { navigator.clipboard.writeText(account.accountId).then(() => setNotice('ID de cuenta copiado')).catch(() => setError('No se pudo copiar el ID.')) }}>{account.platform === 'google_ads' ? 'Google Ads' : 'Meta'} · {formatAccountId(account)}</button></small>) : <small>Sin cuenta publicitaria vinculada</small>}</div></div>
               <div className="client-stats"><span><b>{reviewCount}</b> revisiones</span><span><b>{pendingCount}</b> pendientes</span></div>
-              <span className={`state-pill ${clientItem.active ? 'done' : 'archived'}`}>{clientItem.active ? 'Activo' : 'Archivado'}</span>
-              <div className="row-actions"><button className="icon-button" onClick={() => toggleClient(clientItem)} title={clientItem.active ? 'Archivar' : 'Reactivar'} aria-label={clientItem.active ? `Archivar ${clientItem.name}` : `Reactivar ${clientItem.name}`}><Icon name="archive" /></button></div>
+              <span className={`state-pill ${platformActive(clientItem,platform) ? 'done' : 'archived'}`}>{platformActive(clientItem,platform) ? 'Activo' : 'Archivado'}</span>
+              <div className="row-actions"><button className="icon-button" onClick={() => toggleClient(clientItem,platform)} title={platformActive(clientItem,platform) ? 'Archivar' : 'Reactivar'} aria-label={platformActive(clientItem,platform) ? `Archivar ${clientItem.name}` : `Reactivar ${clientItem.name}`}><Icon name="archive" /></button></div>
             </article>
-          })}</div> : <EmptyState icon="search" title="Sin resultados" text="Probá otro nombre o cambiá el filtro seleccionado." />}
+          })}</div> : <p className="platform-empty">Sin resultados en esta plataforma.</p>}</section>)}
         </section>
       </> : null}
 
       {tab === 'informes' ? <div className="reports-layout">
         <section className="panel report-controls">
           <div><span className="section-kicker">PERÍODO</span><h2>{reportLabel}</h2></div>
-          <div className="segmented" aria-label="Período del informe"><button className={reportPeriod === 'week' ? 'active' : ''} onClick={() => setReportPeriod('week')}>Semanal</button><button className={reportPeriod === 'month' ? 'active' : ''} onClick={() => setReportPeriod('month')}>Histórico mensual</button></div>
+          <div className="segmented report-period" aria-label="Período del informe"><button className={reportPeriod === 'week' ? 'active' : ''} onClick={() => setReportPeriod('week')}>Semanal</button><button className={reportPeriod === 'month' ? 'active' : ''} onClick={() => setReportPeriod('month')}>Histórico mensual</button></div>
           {reportPeriod === 'week' ? <WeekPicker label={weekLabel} onPrevious={() => changeWeek(-1)} onNext={() => changeWeek(1)} /> : <label className="report-title-label">Mes<input type="month" className="report-title-input" value={reportMonth} onChange={event => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) setReportMonth(event.target.value) }} /></label>}
           <label className="report-title-label" htmlFor="report-title">Título del documento<input className="report-title-input" id="report-title" value={reportTitle} maxLength={80} onChange={event => setReportTitle(event.target.value)} placeholder="Informe Ian" /></label>
           <div className="report-mode" role="group" aria-label="Formato del informe"><span className="section-kicker">FORMATO DEL INFORME</span><button className={printMode === 'grilla' ? 'active' : ''} aria-pressed={printMode === 'grilla'} onClick={() => setPrintMode('grilla')}><span><Icon name="calendar" /></span><div><strong>Simple</strong><small>{reportPeriod === 'month' ? 'Resumen de clientes del mes' : 'Matriz de clientes por día'}</small></div><i>{printMode === 'grilla' ? <Icon name="check" size={14} /> : null}</i></button><button className={printMode === 'detalle' ? 'active' : ''} aria-pressed={printMode === 'detalle'} onClick={() => setPrintMode('detalle')}><span><Icon name="report" /></span><div><strong>Detallado</strong><small>Acciones y observaciones</small></div><i>{printMode === 'detalle' ? <Icon name="check" size={14} /> : null}</i></button></div>
           <div className="report-summary"><div><span>Revisiones</span><strong>{reportReviews.length}</strong></div><div><span>Clientes cubiertos</span><strong>{new Set(reportReviews.map(item => item.clientId)).size}</strong></div><div><span>Pendientes</span><strong>{reportPending.length}</strong></div></div>
           <div className="report-downloads"><button className="primary-button print-button" onClick={printReport}><Icon name="print" />Imprimir o guardar PDF</button><button className="secondary-button" onClick={downloadPng} disabled={exportingImage}><Icon name="download" />{exportingImage ? 'Preparando imagen…' : 'Descargar PNG'}</button></div>
           <p className="helper-text">El navegador abrirá el diálogo de impresión. Elegí “Guardar como PDF” para generar el archivo.</p>
+          {onSync ? <div className="report-sync"><button className="secondary-button" disabled={syncingReport} onClick={async () => { setSyncingReport(true); try { await onSync(); setNotice('Estado sincronizado con la DB. Disponible en tus otros navegadores.'); } catch (error) { setError(error instanceof Error ? error.message : 'No se pudo sincronizar. Los pendientes siguen en este dispositivo.'); } finally { setSyncingReport(false) } }}><Icon name="check" />{syncingReport ? 'Sincronizando…' : 'Sincronizar con DB'}</button><p>Guardado automático por registro. Envía pendientes y recupera cambios; no guarda otra copia del informe.</p></div> : null}
         </section>
 
         <ReportPreview store={reportStore} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} />
@@ -665,8 +675,9 @@ export default function App({ initialData, onChange, storageMode = 'local', user
         <header><div><span className="section-kicker">REVISIÓN · {format(selected.day)}</span><h2 id="review-title">{client?.name ?? 'Nueva revisión'}</h2><p>Una revisión también cuenta si no hiciste cambios.</p></div><button className="icon-button" onClick={() => closeReview()} aria-label="Cerrar"><Icon name="close" /></button></header>
         <div className="review-modal-body">
         {reviewSignature(current) !== reviewSignature(formBase.current) ? <div className="draft-conflict" role="status">La revisión cambió. Conservamos tu borrador.<button type="button" onClick={reloadReview}>Cargar versión actual</button></div> : null}
-        <ClientPicker clients={active} value={selected.id} onChange={id => openReview(id, selected.day)} />
-        <QuickActions clientId={selected?.id} catalog={db.customActions} onCreate={createAction} value={actionEntries} onChange={setActionEntries} storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
+        <div className="segmented review-platform-picker" aria-label="Plataforma de la revisión">{PLATFORMS.map(platform => <button type="button" key={platform} className={selected.platform === platform ? 'active' : ''} aria-pressed={selected.platform === platform} onClick={() => openReview(client && platformActive(client,platform) ? client.id : '',selected.day,'modal',false,platform)}>{platformLabel(platform)}</button>)}</div>
+        <ClientPicker clients={active.filter(client => platformActive(client,selected.platform))} value={selected.id} onChange={id => openReview(id, selected.day)} />
+        <QuickActions lockedPlatform={selected.platform} clientId={selected?.id} catalog={db.customActions} onCreate={createAction} value={actionEntries} onChange={setActionEntries} storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
         <ReviewDetailsFields actions={actions} observations={observations} pendingText={pendingText} onActions={setActions} onObservations={setObservations} onPending={setPendingText} onAddPending={addPending} />
         </div>
         <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : null}<div><button className="secondary-button" onClick={() => closeReview()}>Salir</button><button className="primary-button save-button" disabled={!client || closingReview} onClick={() => saveReview()}><Icon name="check" />Guardar revisión</button><button className="secondary-button save-next-button" disabled={!client || closingReview} onClick={() => saveReview(true)}>Guardar y siguiente</button></div></footer>

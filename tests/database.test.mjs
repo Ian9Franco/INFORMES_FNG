@@ -74,7 +74,17 @@ test('isolated PostgreSQL: CAS, RLS, account matching, event deduplication and l
     await assert.rejects(db.query("delete from public.fng_ad_accounts"),/permission denied/)
     await assert.rejects(db.query("delete from public.fng_account_contexts"),/permission denied/)
     const live=(await db.query("select * from public.fng_records where kind='client' and id='c'")).rows[0]
-    await write([{kind:'client',id:'c',expectedVersion:live.version,payload:{...live.payload,active:false}}])
+    await write([{kind:'client',id:'c',expectedVersion:live.version,payload:{...live.payload,archivedPlatforms:['meta_ads']}}])
+    const scopedCatalog=(await db.query('select public.fng_companion_catalog() as catalog')).rows[0].catalog
+    assert.equal(scopedCatalog.accounts.find(a=>a.clientId==='c'&&a.platform==='meta_ads').active,false)
+    assert.equal(scopedCatalog.accounts.find(a=>a.clientId==='c'&&a.platform==='google_ads').active,true)
+    await assert.rejects(write([{kind:'client',id:'c',expectedVersion:live.version+1,payload:{...live.payload,archivedPlatforms:['youtube']}}]),/archivadas/)
+    const scopedBase={clientId:'c',date:'2026-10-15',actions:'',observations:'',createdAt:'2026-10-15T12:00:00Z',actionSchemaVersion:1,actionEntries:[]}
+    await write([{kind:'review',id:'platform-meta',expectedVersion:0,payload:{...scopedBase,id:'platform-meta',platform:'meta_ads'}},{kind:'review',id:'platform-google',expectedVersion:0,payload:{...scopedBase,id:'platform-google',platform:'google_ads'}}])
+    await assert.rejects(write([{kind:'review',id:'duplicate-meta',expectedVersion:0,payload:{...scopedBase,id:'duplicate-meta',platform:'meta_ads'}}]),/unique/)
+    await assert.rejects(write([{kind:'review',id:'cross-platform',expectedVersion:0,payload:{...scopedBase,id:'cross-platform',date:'2026-10-16',platform:'google_ads',actionEntries:[{id:'wrong',typeId:'meta.ad.created',quantity:1,source:'manual',evidence:'user_confirmed'}]}}]),/otra plataforma/)
+    await assert.rejects(write([{kind:'review',id:'platform-google',expectedVersion:1,payload:{...scopedBase,id:'platform-google',platform:'meta_ads'}}]),/inmutable/)
+    await write([{kind:'client',id:'c',expectedVersion:live.version+1,payload:{...live.payload,active:false}}])
     assert.equal((await db.query('select public.fng_companion_catalog() as catalog')).rows[0].catalog.contexts.length,1,'Archiving must preserve context links')
     await db.exec(`select set_config('request.jwt.claim.sub','${b}',false);`)
     assert.equal((await db.query('select * from public.fng_records')).rows.length,0)

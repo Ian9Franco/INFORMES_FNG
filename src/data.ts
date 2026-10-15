@@ -1,8 +1,9 @@
 import type { AdvertisingAccount } from './account-catalog'
-export type Client = { id: string; name: string; active: boolean; advertisingAccounts?: AdvertisingAccount[] }
+export type AdPlatform = 'meta_ads' | 'google_ads'
+export type Client = { id: string; name: string; active: boolean; archivedPlatforms?: AdPlatform[]; advertisingAccounts?: AdvertisingAccount[] }
 import type { CustomAction, ReviewAction } from './review-actions'
-export type Review = { id: string; clientId: string; date: string; createdAt: string; actions: string; observations: string; actionSchemaVersion?: 1; actionEntries?: ReviewAction[]; revision?: number }
-export type Pending = { id: string; clientId: string; text: string; resolved: boolean }
+export type Review = { id: string; clientId: string; platform?: AdPlatform; date: string; createdAt: string; actions: string; observations: string; actionSchemaVersion?: 1; actionEntries?: ReviewAction[]; revision?: number }
+export type Pending = { id: string; clientId: string; platform?: AdPlatform; text: string; resolved: boolean }
 export type Activity = { id: string; platform: 'meta_ads' | 'google_ads'; accountCandidate: string | null; clientId: string | null; startedAt: string; endedAt: string; focusedMs: number; navigationSignals: number; date: string; status: 'pending' | 'dismissed' }
 export type Store = { clients: Client[]; reviews: Review[]; pending: Pending[]; closed: string[]; accountCatalogVersion?: number; activity?: Activity[]; customActions?: CustomAction[] }
 export const initial = ():Store => ({clients:[],reviews:[],pending:[],closed:[]})

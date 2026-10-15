@@ -22,6 +22,10 @@ Las migraciones antiguas `workspaces` se conservan como respaldo. Los snapshots 
 
 ## Consumo
 
+El botón **Informes → Sincronizar con DB** espera los envíos en curso, vacía la cola por lotes y recupera metadata/período activo. No genera snapshots, filas duplicadas ni archivos PDF/PNG en la DB. Si no hubo cambios, no escribe nada; una falla o conflicto no muestra confirmación falsa. Los borradores sin guardar siguen siendo locales: confirmar una revisión es una acción explícita.
+
+Clientes y revisiones son independientes por plataforma: `archivedPlatforms` sólo cambia visibilidad; la unicidad de revisiones es propietario/cliente/fecha/plataforma. El informe junta al cliente y filtra las plataformas archivadas. La migración conserva los registros históricos sin backfill masivo.
+
 - Lectura inicial: clientes, tareas, cierres, settings y período actual.
 - Histórico: sólo el rango de fechas solicitado, paginado en lotes de 500; períodos visitados se reutilizan en memoria.
 - Escritura: sólo registros modificados, agrupados tras 350 ms, máximo 150 por lote.

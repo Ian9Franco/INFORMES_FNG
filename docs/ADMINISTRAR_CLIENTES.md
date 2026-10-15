@@ -85,7 +85,9 @@ La cuenta destino debe existir para ese usuario y plataforma. Un `business_id` p
 
 ## Archivar, reactivar o eliminar
 
-Archivar/reactivar se puede hacer desde Informes, sin perder historial. En SQL:
+Archivar/reactivar se hace de forma **independiente en las tablas Meta Ads y Google Ads** de Informes. `archivedPlatforms` contiene las plataformas archivadas; `active=false` conserva compatibilidad con el archivo global anterior. Reactivar sólo Google de un cliente globalmente archivado activa el cliente y deja Meta archivado. Las cuentas/IDs y el historial no cambian.
+
+Para archivar globalmente desde SQL:
 
 ```sql
 update public.fng_records
@@ -93,7 +95,17 @@ set payload=jsonb_set(payload,'{active}','false'::jsonb)
 where user_id='<UUID_USUARIO>'::uuid and kind='client' and id='<ID_INTERNO_CLIENTE>';
 ```
 
-Usar `true` para reactivar. Los informes excluyen archivados y eliminados.
+Para reactivar globalmente, poner `active=true` y `archivedPlatforms=[]`. Para dejar sólo Google activo:
+
+```sql
+update public.fng_records
+set payload=payload || '{"active":true,"archivedPlatforms":["meta_ads"]}'::jsonb
+where user_id='<UUID_USUARIO>'::uuid and kind='client' and id='<ID_INTERNO_CLIENTE>';
+```
+
+Los informes permanecen unificados por cliente, pero sólo incluyen revisiones/tareas de plataformas activas. Si ambas están archivadas, el cliente no aparece. Companion recibe un estado activo por cuenta/plataforma en su catálogo; usar **Actualizar cuentas** para renovar antes de que venza su caché.
+
+Cada revisión nueva se identifica por cliente, fecha y plataforma, con borradores independientes. El historial anterior no se reescribe al cargar: las acciones mixtas se proyectan por plataforma y las notas libres quedan una sola vez en el registro principal (Meta si era mixto, Google si era sólo Google). Al editar se materializa el grupo completo en una transacción, conservando también las acciones de la otra plataforma. No se duplican notas automáticamente ni se atribuyen notas libres a Google sin evidencia.
 
 Eliminar es excepcional y exclusivo del administrador. Primero exportar un respaldo privado y comprobar dependencias. La DB rechaza borrar clientes con historial. No borrar revisiones o desactivar triggers para forzarlo.
 

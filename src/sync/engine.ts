@@ -13,6 +13,7 @@ export class SyncEngine {
   private before: Store = { clients: [], reviews: [], pending: [], closed: [] }
   private timer: ReturnType<typeof setTimeout> | undefined
   private running = false
+  private inProgress: Promise<void> | null = null
   private inFlight = new Map<string, Change>()
   private disposed = false
   private retry = 1000
@@ -60,6 +61,20 @@ export class SyncEngine {
     this.timer = setTimeout(() => { this.timer = undefined; void this.flush() }, delay)
   }
   async flush() {
+    if(this.inProgress) return this.inProgress
+    this.inProgress = this.flushBatch()
+    try { await this.inProgress } finally { this.inProgress = null }
+  }
+  async synchronize() {
+    for(let batch=0;batch<100;batch++) {
+      await this.flush()
+      if(this.conflicts.size) throw Error('Hay conflictos por resolver antes de sincronizar todo.')
+      if(!this.queued.size) return
+      if(this.status==='offline'||this.status==='error') throw Error(this.message || 'No se pudo conectar. Los pendientes siguen guardados en este dispositivo.')
+    }
+    throw Error('Todavía hay cambios pendientes. Volvé a sincronizar para continuar.')
+  }
+  private async flushBatch() {
     if (this.running || this.disposed) return
     const changes = [...this.queued].filter(([key]) => !this.conflicts.has(key)).map(([, change]) => change).sort((a,b) => changePriority(a)-changePriority(b)).slice(0, 150)
     if (!changes.length) return

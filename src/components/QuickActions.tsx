@@ -30,10 +30,11 @@ function readPreferences(key: string): { platform: AdPlatform; favorites: Action
   return { platform: 'meta_ads', favorites: defaultFavorites }
 }
 
-export default function QuickActions({ value, onChange, compact = false, storageKey = 'fng-action-prefs:local', clientId, catalog = [], onCreate }: { clientId?: string; catalog?: CustomAction[]; onCreate?: (action: CustomAction) => void; value: ReviewAction[]; onChange: (value: ReviewAction[]) => void; compact?: boolean; storageKey?: string }) {
+export default function QuickActions({ value, onChange, compact = false, storageKey = 'fng-action-prefs:local', clientId, catalog = [], onCreate, lockedPlatform }: { lockedPlatform?: AdPlatform; clientId?: string; catalog?: CustomAction[]; onCreate?: (action: CustomAction) => void; value: ReviewAction[]; onChange: (value: ReviewAction[]) => void; compact?: boolean; storageKey?: string }) {
   const [preferences, setPreferences] = useState(() => readPreferences(storageKey))
   const [showAll, setShowAll] = useState(!compact)
-  const { platform, favorites } = preferences
+  const { platform: preferredPlatform, favorites } = preferences
+  const platform = lockedPlatform ?? preferredPlatform
   const definitions = [...ACTION_TYPES, ...availableCustomActions(catalog, clientId)]
   useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(preferences)) } catch { /* Kept for this session. */ } }, [preferences, storageKey])
   const group = useId()
@@ -49,7 +50,7 @@ export default function QuickActions({ value, onChange, compact = false, storage
   }
   return <LayoutGroup id={group}><section className={`quick-actions ${compact ? 'is-compact' : ''}`} aria-label="Acciones rápidas">
     <div className="quick-actions-heading"><div><h3>¿Qué hiciste hoy?</h3><p>Elegí acciones y ajustá la cantidad.</p></div><span>{value.length} seleccionadas</span></div>
-    <div className="platform-switch" role="group" aria-label="Plataforma publicitaria">{(['meta_ads', 'google_ads'] as const).map(item => <button type="button" key={item} aria-pressed={platform === item} onClick={() => setPreferences(current => ({ ...current, platform: item }))}>{platform === item ? <motion.span className="platform-highlight" layoutId="platform" transition={transition} /> : null}<span>{item === 'meta_ads' ? 'Meta Ads' : 'Google Ads'}</span></button>)}</div>
+    {lockedPlatform ? <p className="review-platform-context">{lockedPlatform === 'meta_ads' ? 'Meta Ads' : 'Google Ads'} · revisión independiente</p> : <div className="platform-switch" role="group" aria-label="Plataforma publicitaria">{(['meta_ads', 'google_ads'] as const).map(item => <button type="button" key={item} aria-pressed={platform === item} onClick={() => setPreferences(current => ({ ...current, platform: item }))}>{platform === item ? <motion.span className="platform-highlight" layoutId="platform" transition={transition} /> : null}<span>{item === 'meta_ads' ? 'Meta Ads' : 'Google Ads'}</span></button>)}</div>}
     <div className="available-action-tags" aria-label="Añadir una acción">{definitions.filter(item => item.platform === platform && (showAll || favorites.includes(item.id) || isScheduledAction(item.id) || item.id.startsWith('custom.'))).map(item => {
       const selected = value.find(entry => entry.typeId === item.id)
       return <div className="action-tile" key={item.id}><button type="button" data-action-type-id={item.id} aria-pressed={Boolean(selected)} disabled={!selected && value.length >= 40} title={'scope' in item ? item.scope === 'client' ? 'Sólo este cliente' : 'Todos mis clientes' : undefined} onClick={() => selected ? onChange(value.filter(entry => entry.id !== selected.id)) : add(item.id)}>{selected ? <AnimatedCheck /> : <Plus size={14} aria-hidden="true" />}{item.label}</button>{showAll ? <button type="button" className="favorite-action" aria-label={`${favorites.includes(item.id) ? 'Quitar de favoritas' : 'Añadir a favoritas'}: ${item.label}`} aria-pressed={favorites.includes(item.id)} onClick={() => setPreferences(current => ({ ...current, favorites: current.favorites.includes(item.id) ? current.favorites.filter(id => id !== item.id) : [...current.favorites, item.id] }))}><Star size={14} fill={favorites.includes(item.id) ? 'currentColor' : 'none'} aria-hidden="true" /></button> : null}</div>

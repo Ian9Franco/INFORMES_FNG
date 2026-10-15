@@ -38,6 +38,30 @@ async function sampleMotion(page, selector) {
   },selector)
 }
 async function finishMotion(page) { return page.evaluate(()=>{window.feedbackSampling=false;return window.feedbackFrames}) }
+async function startActionGeometry(page, clientId) {
+  await page.evaluate(clientId=>{
+    window.actionGeometry=[];window.actionGeometrySampling=true
+    const sample=()=>{
+      if(!window.actionGeometrySampling)return
+      const row=document.querySelector(`.review-item[data-client-id="${clientId}"]`)
+      window.actionGeometry.push(['.review-row','.review-name','.review-state-label','.review-row-tools','.one-touch-review','.quick-register'].map(selector=>{
+        const element=row?.querySelector(selector)
+        if(!element)return null
+        const {x,y,width,height}=element.getBoundingClientRect()
+        return {x,y,width,height}
+      }))
+      requestAnimationFrame(sample)
+    };sample()
+  },clientId)
+}
+async function assertStableActions(page) {
+  const frames=await page.evaluate(()=>{window.actionGeometrySampling=false;return window.actionGeometry})
+  assert.ok(frames.length>3,'Sample the whole state transition, not only the final frame')
+  for(const frame of frames) for(let i=0;i<frame.length;i++) {
+    assert.ok(frame[i]&&frames[0][i],'Both action slots must remain mounted')
+    for(const dimension of ['x','y','width','height']) assert.ok(Math.abs(frame[i][dimension]-frames[0][i][dimension])<1,`Client controls moved: slot ${i}, ${dimension}, ${frames[0][i][dimension]} → ${frame[i][dimension]}`)
+  }
+}
 async function assertSaveContrast(page) {
   const values=await page.locator('.rapid-save-bar :is(.save-button,.save-next-button)').evaluateAll(buttons=>buttons.map(button=>({color:getComputedStyle(button).color,background:getComputedStyle(button).backgroundColor})))
   const luminance=rgb=>rgb.match(/[\d.]+/g).slice(0,3).map(value=>Number(value)/255).map(value=>value<=.04045?value/12.92:((value+.055)/1.055)**2.4).reduce((sum,value,index)=>sum+value*[.2126,.7152,.0722][index],0)
@@ -107,7 +131,7 @@ try {
   await phone.page.setViewportSize({width:390,height:844})
   assert.ok((await pc.page.locator('.workspace').boundingBox()).width>1650,'Desktop must use the available width')
   assert.ok((await pc.page.locator('.daily-overview').boundingBox()).height<160,'Daily overview should be compact')
-  assert.equal(await pc.page.locator('.review-list').evaluate(element=>getComputedStyle(element).backgroundImage),'none','No repeated lines behind client rows')
+  assert.equal(await pc.page.locator('.review-list').first().evaluate(element=>getComputedStyle(element).backgroundImage),'none','No repeated lines behind client rows')
   await sampleMotion(pc.page,'dialog.review-modal')
   await pc.page.getByRole('button',{name:'Registrar revisión',exact:true}).click()
   await pc.page.locator('dialog.review-modal[open]').waitFor()
@@ -127,12 +151,25 @@ try {
   assert.ok(await pc.page.locator('dialog.review-modal').evaluate(element=>Boolean(element.style.getPropertyValue('--review-close-transform'))))
   await pc.page.locator('dialog.review-modal').waitFor({state:'detached'})
   await sampleMotion(pc.page,'.review-item[data-client-id="a"] .review-state')
+  await startActionGeometry(pc.page,'a')
+  await startActionGeometry(phone.page,'a')
   await pc.page.getByRole('button',{name:'Revisado sin cambios: ALLEGRA',exact:true}).click()
   await phone.page.waitForFunction(()=>document.querySelector('.metrics-grid strong')?.textContent==='1')
+  await pc.page.waitForTimeout(650)
+  await assertStableActions(pc.page)
+  await assertStableActions(phone.page)
+  assert.equal(await pc.page.getByRole('button',{name:'Revisión confirmada: ALLEGRA',exact:true}).getAttribute('aria-disabled'),'true')
+  assert.equal(await pc.page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Revisión confirmada: ALLEGRA','Confirmation must retain keyboard focus on the same control')
   const confirmationFrames=(await finishMotion(pc.page)).filter(Boolean)
   assert.ok(confirmationFrames.some(frame=>frame.transform!=='none'&&frame.transform!=='matrix(1, 0, 0, 1, 0, 0)'),'Client confirmation must have an elastic state transition')
+  await startActionGeometry(pc.page,'a')
+  await startActionGeometry(phone.page,'a')
   await pc.page.getByRole('button',{name:'Deshacer',exact:true}).click()
   await phone.page.waitForFunction(()=>document.querySelector('.metrics-grid strong')?.textContent==='0')
+  await pc.page.waitForTimeout(650)
+  await assertStableActions(pc.page)
+  await assertStableActions(phone.page)
+  console.log('Stable action slots and focus across confirmation, undo and Realtime on desktop/mobile; narrow dark layouts covered by verify-materials')
   writes=0
   const beforeExpand=await pc.page.evaluate(()=>scrollY)
   await sampleMotion(pc.page,'.rapid-review')
@@ -218,13 +255,13 @@ try {
   console.log('Durable offline outbox and reconnect passed')
 
   await phone.page.getByRole('button',{name:'Registrar acciones: CAUCE',exact:true}).click()
-  await phone.page.getByRole('button',{name:'Google Ads',exact:true}).click()
+  await phone.page.getByText('Meta Ads · revisión independiente',{exact:true}).waitFor()
   await phone.page.getByRole('button',{name:'Más acciones · personalizar favoritas',exact:true}).click()
-  await phone.page.getByRole('button',{name:'Añadir a favoritas: Añadí anuncios',exact:true}).click()
+  await phone.page.getByRole('button',{name:'Añadir a favoritas: Creé campañas',exact:true}).click()
   await phone.page.getByRole('button',{name:'Sólo favoritas',exact:true}).click()
-  assert.equal(await phone.page.locator('.available-action-tags button[data-action-type-id="google.ad.created"]').count(),1)
-  await phone.page.locator('.available-action-tags button[data-action-type-id="google.keyword.updated"]').click()
-  await phone.page.getByLabel('Cantidad: Actualicé keywords',{exact:true}).fill('3')
+  assert.equal(await phone.page.locator('.available-action-tags button[data-action-type-id="meta.campaign.created"]').count(),1)
+  await phone.page.locator('.available-action-tags button[data-action-type-id="meta.campaign.created"]').click()
+  await phone.page.getByLabel('Cantidad: Creé campañas',{exact:true}).fill('3')
   await phone.page.locator('.rapid-details > summary').click()
   await phone.page.getByLabel('Nuevo pendiente',{exact:true}).fill('Controlar keywords mañana')
   await assertSaveContrast(phone.page)
@@ -241,7 +278,7 @@ try {
   await phone.page.screenshot({path:path.join(output,'mobile-rapid-register.png'),fullPage:false})
   await phone.page.getByRole('button',{name:'Guardar y siguiente',exact:false}).click()
   await phone.page.getByRole('region',{name:'Registro rápido de DA MILAN',exact:true}).waitFor()
-  assert.equal(await phone.page.getByRole('region',{name:'Registro rápido de DA MILAN',exact:true}).getByRole('button',{name:'Google Ads',exact:true}).getAttribute('aria-pressed'),'true','Platform is remembered across clients')
+  await phone.page.getByRole('region',{name:'Registro rápido de DA MILAN',exact:true}).getByText('Meta Ads · revisión independiente',{exact:true}).waitFor()
   await pc.page.waitForFunction(()=>document.querySelector('.metrics-grid strong')?.textContent==='3')
   assert.equal([...rows.values()].filter(row=>row.kind==='task'&&!row.deleted).length,1)
   await phone.page.getByRole('button',{name:'Guardar',exact:true}).press('Control+Enter')
@@ -286,7 +323,7 @@ try {
   await pc.page.getByRole('button',{name:'Guardar',exact:true}).click()
   await phone.page.waitForFunction(()=>JSON.parse(localStorage.getItem('fng-cache:00000000-0000-4000-8000-000000000111')).customActions?.length===2)
   await phone.page.getByRole('button',{name:'Editar revisión: ALLEGRA',exact:true}).click()
-  await phone.page.getByRole('button',{name:'Meta Ads',exact:true}).click()
+  await phone.page.getByText('Meta Ads · revisión independiente',{exact:true}).waitFor()
   assert.equal(await phone.page.getByRole('button',{name:'Revisé enlaces',exact:true}).count(),1,'General actions sync to other clients and devices')
   assert.equal(await phone.page.getByRole('button',{name:'Actualicé catálogo del hotel',exact:true}).count(),0,'Client-specific actions stay with JONDE')
   await phone.page.getByRole('button',{name:'Cerrar registro: ALLEGRA',exact:true}).click()

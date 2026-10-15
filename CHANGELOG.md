@@ -5,6 +5,13 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — mejoras continuas
 
 ### Interfaz operativa
+- Tablas separadas Meta Ads / Google Ads en Jornada, Semana y Clientes; archivo/reactivación, revisiones, cantidades y borradores independientes por plataforma. Informe unificado por cliente que excluye sólo la plataforma archivada.
+- Nueva unicidad cliente/fecha/plataforma y validación SQL de acciones por plataforma; RLS y restricciones de catálogo conservadas. Historial previo proyectado sin backfill; primera edición conserva todas las plataformas en un lote atómico.
+- Cabecera DB → tema → perfil, configuración de Companion en el menú de usuario y selector semanal/mensual ajustado al ancho de sus botones.
+- «Sincronizar con DB» envía la cola pendiente y refresca el período, sin duplicar snapshots ni subir archivos; espera operaciones en curso y no confirma errores/conflictos como guardados.
+- Acciones de jornada con dos espacios permanentes y anchos estables: confirmar, deshacer, editar o desplegar no desplaza botones, nombres ni etiquetas. El control confirmado conserva el foco y rechaza nuevos envíos; feedback por relieve/color en esa zona sin escalar el objetivo táctil.
+- Materiales skeuomórficos coherentes en claro/oscuro: grano de papel estático, superficies con canto y luz, botones elevados, selectores/campos hundidos y tipografía editorial. Sólo pantalla, sin afectar medidas ni estilo de exportación A4; avisos móviles separados del dock.
+- Prueba visual `verify-materials.mjs` con datos ficticios, medición por frame, nombres largos, foco/duplicados, cuatro secciones y anchos de 320/390/1440 px.
 - Catálogo privado en Supabase: se retiran IDs reales del código/fixtures/documentación y los seeds automáticos. Sólo archivar/reactivar desde Informes; alta/baja, nombres, cuentas y contextos exclusivos de administración DB, también protegidos en la API.
 - RPC privada para el catálogo de Companion, RLS por usuario, contextos confirmados y caché local de una hora; sin búsquedas remotas por URL ni nuevas cuentas desde respaldos. Guía `docs/ADMINISTRAR_CLIENTES.md`; historial Git anterior pendiente por pedido explícito.
 - Importación administrativa privada de 17 cuentas Google Ads, conservando clientes existentes, archivos e historial; IDs de texto sin guiones y presentación `000-000-0000`. Etiquetas Meta/Google Ads según la plataforma, sin seed ni polling del catálogo en la web.

@@ -1,0 +1,138 @@
+/* Screen-only material system. Physical A4 sheets/export measurements stay untouched. */
+@media screen {
+  :root {
+    --material-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='144' height='144'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='.045'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Cpath fill='%23808080' filter='url(%23grain)' d='M0 0h144v144H0z'/%3E%3C/svg%3E");
+    --material-light: rgba(255,255,255,.78);
+    --material-edge: rgba(108,87,54,.12);
+    --material-pit: rgba(76,60,35,.13);
+    --desk-light: rgba(255,253,244,.75);
+    --surface-sheen: linear-gradient(155deg,rgba(255,255,255,.32),transparent 50%);
+    --control-sheen: linear-gradient(180deg,rgba(255,255,255,.055),transparent 70%);
+    --shadow-card: inset 0 1px 0 var(--material-light), 0 1px 1px var(--material-edge), 0 3px 3px -2px rgba(76,60,35,.12), 0 14px 28px -20px rgba(76,60,35,.3);
+    --shadow-raised: inset 0 1px 0 var(--material-light), inset 0 -1px 0 var(--material-edge), 0 2px 2px rgba(76,60,35,.09), 0 5px 9px -4px rgba(76,60,35,.2);
+    --shadow-pressed: inset 0 2px 4px var(--material-pit), inset 0 1px 2px var(--material-edge), 0 1px 0 var(--material-light);
+    --shadow-popover: inset 0 1px 0 var(--material-light), 0 2px 4px var(--material-edge), 0 24px 60px -15px rgba(35,35,24,.32);
+  }
+  :root[data-theme='dark'] {
+    --material-light: rgba(220,236,213,.09);
+    --material-edge: rgba(0,0,0,.32);
+    --material-pit: rgba(0,0,0,.35);
+    --desk-light: rgba(92,112,89,.13);
+    --surface-sheen: linear-gradient(155deg,rgba(213,233,204,.025),transparent 50%);
+    --shadow-card: inset 0 1px 0 var(--material-light), 0 1px 1px var(--material-edge), 0 3px 4px -2px rgba(0,0,0,.4), 0 16px 30px -18px rgba(0,0,0,.6);
+    --shadow-raised: inset 0 1px 0 var(--material-light), inset 0 -1px 0 rgba(0,0,0,.2), 0 2px 2px rgba(0,0,0,.24), 0 6px 10px -4px rgba(0,0,0,.45);
+    --shadow-popover: inset 0 1px 0 var(--material-light), 0 2px 4px rgba(0,0,0,.3), 0 24px 60px -12px rgba(0,0,0,.7);
+  }
+  body, .auth-shell {
+    background-color: var(--paper);
+    background-image: radial-gradient(ellipse at 35% 0%,var(--desk-light),transparent 70%),var(--material-grain);
+  }
+  /* New platform headings must not become scroll anchors below an expanding editor. */
+  .app-shell { overflow-anchor: none; }
+  .app-navigation { box-shadow: 0 1px 0 var(--material-light), 0 2px 10px -8px var(--material-pit); }
+  .wordmark-symbol { text-shadow: 0 1px 0 var(--material-light); }
+  .panel, .daily-overview, .auth-card, .confirmation-dialog, .review-modal, .account-password-dialog {
+    background-color: var(--surface);
+    background-image: var(--surface-sheen),var(--material-grain);
+    box-shadow: var(--shadow-card);
+  }
+  .review-modal, .confirmation-dialog, .account-password-dialog { box-shadow: var(--shadow-popover); }
+  .panel-heading h2, .panel > h2, .review-modal h2, .auth-card h1 {
+    font-family: Georgia,'Times New Roman',serif;
+    font-weight: 500;
+    letter-spacing: -.025em;
+  }
+  .panel-heading h2, .panel > h2 { font-size: 21px; }
+  .daily-overview { background-color: color-mix(in srgb,var(--surface) 88%,var(--accent-soft)); }
+  .daily-overview .hero-panel, .daily-overview .metrics-grid article { background: none; box-shadow: none; }
+  .daily-overview .metrics-grid strong, .report-summary strong { font-variant-numeric: tabular-nums; }
+  .progress-ring { box-shadow: 0 1px 0 var(--material-light), inset 0 2px 4px var(--material-pit); }
+  .progress-ring::before { box-shadow: var(--shadow-raised); background-image: var(--surface-sheen); }
+  .primary-button, .secondary-button, .icon-button, .theme-toggle, .account-avatar,
+  .available-action-tags .action-tile, .story-day-trigger, .story-days-done {
+    background-image: var(--control-sheen);
+    box-shadow: var(--shadow-raised);
+  }
+  .primary-button { box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -1px 0 rgba(0,0,0,.12), 0 2px 3px var(--material-pit), 0 6px 12px -7px var(--accent); }
+  :is(.primary-button,.secondary-button,.icon-button,.theme-toggle,.story-day-trigger):active:not(:disabled) { box-shadow: var(--shadow-pressed); }
+  .search-box input, .review-detail-fields textarea, .review-detail-fields input,
+  .report-title-input, .client-picker-trigger, .companion-access input, .auth-card input,
+  .create-action-card input, .action-quantity, .segmented, .platform-switch {
+    box-shadow: var(--shadow-pressed);
+  }
+  .search-box input:focus, .review-detail-fields textarea:focus, .review-detail-fields input:focus { box-shadow: var(--shadow-pressed); }
+  .segmented button.active, .platform-highlight, .action-scope button[aria-pressed='true'] { box-shadow: var(--shadow-raised); background-image: var(--control-sheen); }
+  .client-avatar, .review-state, .empty-state > span { box-shadow: inset 0 1px 3px var(--material-pit), 0 1px 0 var(--material-light); }
+  .review-state.done { box-shadow: inset 0 1px 1px var(--material-pit), 0 1px 0 var(--material-light); }
+  .state-pill { box-shadow: inset 0 1px 2px var(--material-pit), 0 1px 0 var(--material-light); }
+  .task-check { box-shadow: var(--shadow-pressed); border: 0; }
+  .review-item::after { box-shadow: inset 0 1px 3px var(--material-pit), 0 1px 0 var(--material-light); }
+  .rapid-review-content { padding-inline: 6px; }
+  .selected-action, .account-sync, .create-action-card { box-shadow: inset 0 1px 0 var(--material-light), 0 1px 2px var(--material-edge); }
+  .client-picker-menu, .story-day-menu, .account-menu { background-image: var(--surface-sheen),var(--material-grain); box-shadow: var(--shadow-popover); }
+  .rapid-save-bar { box-shadow: var(--shadow-popover); }
+  .week-table td button { box-shadow: var(--shadow-pressed); border: 0; }
+  .week-table td button.reviewed { box-shadow: var(--shadow-raised); background-image: var(--control-sheen); }
+  .report-mode > button { box-shadow: var(--shadow-pressed); }
+  .report-mode > button.active { box-shadow: var(--shadow-raised); background-image: var(--control-sheen); }
+  .report-summary > div { box-shadow: inset 0 1px 3px var(--material-pit), 0 1px 0 var(--material-light); }
+  .notebook-preview-frame { box-shadow: 0 1px 1px var(--material-edge), 0 4px 0 -2px var(--surface), 0 5px 1px -2px var(--material-edge), 0 18px 36px -18px var(--material-pit); }
+  .site-footer a { text-shadow: 0 1px 0 var(--material-light); }
+  .workspace-controls { display: flex; align-items: center; gap: 10px; }
+  .account-menu .companion-access { margin: 8px 0; padding: 12px; border-radius: 14px; background: var(--surface-soft); }
+  .account-menu .companion-access form { max-width: 100%; }
+  .platform-section + .platform-section { margin-top: 24px; }
+  .platform-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 8px; }
+  .platform-section-heading h3 { font-size: 13px; letter-spacing: .01em; margin: 0; color: var(--accent); }
+  .platform-section-heading > span, .platform-empty { color: var(--muted); font-size: 11px; }
+  .platform-empty { margin: 10px 0; line-height: 1.5; }
+  .review-platform-context { font-size: 12px; color: var(--accent); margin: 8px 0 16px; }
+  .review-platform-picker { width: fit-content; margin: 12px 0; }
+  .report-controls .report-period { display: inline-flex; width: fit-content; max-width: 100%; justify-content: flex-start; gap: 3px; padding: 4px; }
+  .report-controls .report-period button { flex: none; min-height: 38px; padding: 8px 11px; white-space: nowrap; }
+  .report-sync { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--rule); }
+  .report-sync button { width: 100%; min-height: 44px; }
+  .report-sync p { font-size: 11px; color: var(--muted); line-height: 1.5; margin: 10px 0 0; }
+  .client-management-row > .state-pill { width: 80px; max-width: 100%; text-align: center; }
+  .skeleton-hero, .skeleton-list { box-shadow: var(--shadow-card); }
+
+  /* Permanent action slots: status/copy changes must not reflow neighbouring controls. */
+  .review-row-header { gap: 8px; }
+  .review-row-header .review-row { grid-template-columns: 28px minmax(0,1fr) 82px 18px; }
+  .review-state-label { width: 82px; min-width: 82px; height: 26px; padding-inline: 7px; }
+  .review-row-tools { display: grid; grid-template-columns: 102px 78px; gap: 6px; align-items: center; }
+  .review-row-tools button { width: 100%; height: 44px; min-width: 0; white-space: nowrap; padding: 8px 6px; justify-content: center; line-height: 1.2; }
+  .review-row-tools :is(.one-touch-review,.quick-register),
+  .review-row-tools :is(.one-touch-review,.quick-register):is(:hover,:active,:focus-visible) { animation: none; transform: none; scale: 1; }
+  .review-row-tools .one-touch-review { box-shadow: var(--shadow-raised); background-image: var(--control-sheen); }
+  .review-row-tools .one-touch-review[aria-disabled='true'] { cursor: default; opacity: .5; }
+  .review-row-tools .one-touch-review.is-confirmed { opacity: 1; background-color: var(--accent-soft); color: var(--accent); box-shadow: var(--shadow-pressed); }
+  .review-row-tools .one-touch-review:active:not([aria-disabled='true']) { box-shadow: var(--shadow-pressed); }
+  .review-row-tools .quick-register { box-shadow: none; }
+  .review-row-tools .quick-register:hover:not(:disabled) { background: var(--surface-soft); box-shadow: inset 0 1px 0 var(--material-light); }
+  .review-row-tools :is(button,svg) { transition: color .2s ease, background-color .2s ease, box-shadow .2s ease; }
+
+  @media (min-width: 801px) {
+    .app-navigation nav { box-shadow: var(--shadow-pressed); }
+    .navigation-highlight { background-image: var(--control-sheen); box-shadow: var(--shadow-raised); }
+  }
+  @media (max-width: 800px) {
+    .app-shell .toast { bottom: calc(112px + env(safe-area-inset-bottom)); }
+  }
+  @media (max-width: 950px) {
+    .client-management-row { grid-template-columns: minmax(0,1fr) 84px; }
+    .client-management-row .row-actions { justify-content: center; }
+  }
+  @media (max-width: 600px) {
+    .review-row-header { gap: 6px; }
+    .review-row-header .review-row { grid-template-columns: 26px minmax(0,1fr); }
+    .review-row-tools { grid-template-columns: 44px 68px; }
+    .review-row-tools .one-touch-review { width: 44px; padding: 0; }
+    .review-row-tools .quick-register { padding-inline: 3px; }
+    .panel-heading h2, .panel > h2 { font-size: 20px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .review-row-tools :is(button,svg) { transition: none; }
+  }
+}
+.notebook-report .report-platforms { display: inline; font-size: 7pt; color: #52624d; line-height: 1.1; margin-left: 1mm; }
