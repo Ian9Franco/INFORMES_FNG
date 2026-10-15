@@ -6,6 +6,7 @@ import '../notebook.css'
 import '../rapid-review.css'
 import '../interface-polish.css'
 import '../personalization.css'
+import '../report-detail.css'
 export const metadata: Metadata = {
   title: 'Informes FNG',
   description: 'Seguimiento de clientes, revisiones, pendientes e informes publicitarios',

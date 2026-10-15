@@ -5,6 +5,9 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — mejoras continuas
 
 ### Interfaz operativa
+- Detallado compacto en dos columnas de 10,5 pt: paginación A4 medida, clientes juntos cuando entran, continuación para notas extensas y pies numerados; se omiten etiquetas vacías sin perder acciones/notas.
+- Vista previa/PDF comparten páginas físicas; el PNG detallado contiene todas las hojas en una imagen vertical, con límites de memoria para históricos muy largos. La planilla normal mantiene una sola hoja.
+- Jornada conserva la posición al desplegar clientes: se elimina el scroll automático de apertura y se desactiva el anclaje de las filas; «Guardar y siguiente» sigue ubicando el próximo cliente.
 - Acciones personalizadas con ID estable: generales para la cuenta o exclusivas de un cliente, sincronizadas por registro y con alcance validado en Postgres; snapshot de etiquetas en el historial.
 - «Programé publicación» en Meta (`meta.post.scheduled`), con cantidades, días destino y resumen `P:` en informes normales y detalle completo en PNG/PDF.
 - Cabecera única: tema y cuenta juntos; correo, contraseña, cierre de sesión y actualización dentro del menú. Estado explícito de DB, separado de Companion.

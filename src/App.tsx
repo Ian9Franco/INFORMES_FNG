@@ -299,10 +299,8 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     setActionEntries(draft?.actionEntries ?? (validReviewActions(reviewItem?.actionEntries) ? reviewItem.actionEntries : []))
     setObservations(draft?.observations ?? reviewItem?.observations ?? '')
     setPendingText(draft?.pendingText ?? '')
-    if (mode === 'inline') {
-      if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current)
-      rowScrollTimer.current = setTimeout(() => document.querySelector<HTMLElement>(`.review-item[data-client-id="${CSS.escape(clientId)}"]`)?.scrollIntoView({ block: 'start', behavior: calm ? 'instant' : 'smooth' }), calm ? 0 : 220)
-    }
+    // Expanding a client must keep the user's reading position unchanged.
+    if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current)
   }
 
   function saveReview(andNext = false) {
@@ -455,13 +453,17 @@ export default function App({ initialData, onChange, storageMode = 'local', user
 
   async function downloadPng() {
     if (exportingImage) return
-    const paper = document.querySelector<HTMLElement>('.print-paper .notebook-report')
+    const paper = document.querySelector<HTMLElement>('.print-paper')
     if (!paper) return
     setExportingImage(true)
     try {
       await document.fonts.ready
       const { toPng } = await import('html-to-image')
-      const image = await toPng(paper, { pixelRatio: 3.125, backgroundColor: '#ffffff', skipFonts: true })
+      const width = paper.offsetWidth, height = paper.offsetHeight
+      // A detailed PNG is one vertical image of all physical sheets, never only page one.
+      // Bound canvas memory/dimensions for very long monthly histories.
+      const pixelRatio = Math.min(3.125, 32760 / height, Math.sqrt(32000000 / (width * height)))
+      const image = await toPng(paper, { width, height, pixelRatio, backgroundColor: '#ffffff', skipFonts: true, filter: node => !(node instanceof HTMLElement && node.classList.contains('detail-measure')), style: { position: 'static', left: '0', top: '0' } })
       const anchor = document.createElement('a')
       anchor.download = `${documentTitle.replace(/[<>:"/\\|?*]/g, '-')} - ${reportPeriod === 'month' ? reportMonth : week} - ${printMode === 'grilla' ? 'semanal' : 'detallado'}.png`
       anchor.href = image

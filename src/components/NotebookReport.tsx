@@ -2,14 +2,21 @@
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import { date, format, type Store, weekDays } from '../data'
-import { describeReviewActions, storyDaysLabel } from '../review-actions'
+import { storyDaysLabel } from '../review-actions'
 import { sortClients } from '../clients'
 import { monthBounds } from '../sync/records'
 
+import DetailedNotebookReport from './DetailedNotebookReport'
+
 const weekdays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
 
-/** Identical physical sheet for preview and printing; all content fits without clipping. */
-export default function NotebookReport({ store, week, month, mode, title, preview = false }: { store: Store; week: string; month?: string; mode: 'grilla' | 'detalle'; title: string; preview?: boolean }) {
+type Props = { store: Store; week: string; month?: string; mode: 'grilla' | 'detalle'; title: string; preview?: boolean }
+export default function NotebookReport(props: Props) {
+  return props.mode === 'detalle' ? <DetailedNotebookReport {...props} /> : <GridReport {...props} />
+}
+
+/** The summary grid remains a single physical A4 sheet. */
+function GridReport({ store, week, month, mode, title, preview = false }: { store: Store; week: string; month?: string; mode: 'grilla' | 'detalle'; title: string; preview?: boolean }) {
   const sheet = useRef<HTMLDivElement>(null)
   const area = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
@@ -50,10 +57,10 @@ export default function NotebookReport({ store, week, month, mode, title, previe
     return () => { observer.disconnect(); window.removeEventListener('beforeprint', resize) }
   }, [store, week, month, mode, title, preview])
 
-  const paper = <div ref={sheet} className={`notebook-report ${mode === 'detalle' ? 'report-detail' : 'report-grid'}`}>
+  const paper = <div ref={sheet} data-export-page="1" className={`notebook-report ${mode === 'detalle' ? 'report-detail' : 'report-grid'}`}>
     <header><div><span className="report-overline">LIBRETA DE SEGUIMIENTO</span><h1>{title}</h1><p>Publicidad · registro {month ? 'mensual' : 'semanal'}</p></div><div><small>{month ? 'MES' : 'SEMANA'}</small><strong>{weekLabel}</strong></div></header>
     <div className="report-body" ref={area}><div className="report-content" ref={content}>
-      {mode === 'grilla' ? month ? <table><thead><tr><th>CLIENTE</th><th>REVISIONES</th><th>ACCIONES</th><th>ÚLTIMA REVISIÓN</th></tr></thead><tbody>{clients.filter(client => client.active || entries.some(review => review.clientId === client.id)).map(client => {
+      {month ? <table><thead><tr><th>CLIENTE</th><th>REVISIONES</th><th>ACCIONES</th><th>ÚLTIMA REVISIÓN</th></tr></thead><tbody>{clients.filter(client => client.active || entries.some(review => review.clientId === client.id)).map(client => {
         const reviews = entries.filter(review => review.clientId === client.id).sort((a,b) => a.date.localeCompare(b.date))
         const scheduled = storyDaysLabel(reviews)
         const posts = storyDaysLabel(reviews, true, 'meta.post.scheduled')
@@ -63,15 +70,7 @@ export default function NotebookReport({ store, week, month, mode, title, previe
         const scheduled = storyDaysLabel(review ? [review] : [])
         const posts = storyDaysLabel(review ? [review] : [], true, 'meta.post.scheduled')
         return <td key={day}>{review ? '✓' : '·'}{scheduled ? <small className="story-cell-note">H: {scheduled}</small> : null}{posts ? <small className="story-cell-note">P: {posts}</small> : null}</td>
-      })}</tr>)}</tbody></table> : <>
-        <p className="report-intro">{entries.length} revisiones realizadas · {new Set(entries.map(review => review.clientId)).size} clientes</p>
-        {clients.map(client => {
-          const reviews = entries.filter(review => review.clientId === client.id).sort((a, b) => a.date.localeCompare(b.date))
-          return reviews.length ? <section key={client.id}><h2>{client.name}</h2>{reviews.map(review => <article key={review.id}><b>{format(review.date)}</b><div><p><strong>Acciones: </strong>{describeReviewActions(review) || 'Sin modificaciones registradas.'}</p><p><strong>Observaciones: </strong>{review.observations || 'Sin observaciones registradas.'}</p></div></article>)}</section> : null
-        })}
-        {!entries.length ? <p>Esta semana todavía no tiene revisiones registradas.</p> : null}
-        <section><h2>Pendientes abiertos</h2>{pending.length ? pending.map(item => <p key={item.id}><strong>{store.clients.find(client => client.id === item.clientId)?.name}: </strong>{item.text}</p>) : <p>Sin pendientes abiertos.</p>}</section>
-      </>}
+      })}</tr>)}</tbody></table>}
     </div></div>
     <footer><span>{title} · seguimiento publicitario</span><span>{new Date().toLocaleDateString('es-AR')} · 1 / 1</span></footer>
   </div>

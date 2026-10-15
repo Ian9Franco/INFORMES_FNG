@@ -94,7 +94,10 @@ try {
   await pc.page.getByRole('button',{name:'Deshacer',exact:true}).click()
   await phone.page.waitForFunction(()=>document.querySelector('.metrics-grid strong')?.textContent==='0')
   writes=0
+  const beforeExpand=await pc.page.evaluate(()=>scrollY)
   await pc.page.getByRole('button',{name:'Registrar acciones: JONDE',exact:true}).click()
+  await pc.page.waitForTimeout(450)
+  assert.ok(Math.abs(await pc.page.evaluate(()=>scrollY)-beforeExpand)<=2,'Expanding a client must not scroll the reading position')
   assert.equal(await pc.page.locator('dialog').count(),0,'Inline register must not open a modal')
   const deletedTag=pc.page.locator('.available-action-tags button[data-action-type-id="meta.ad.deleted"]')
   const tagPosition=()=>deletedTag.evaluate(element=>{const box=element.getBoundingClientRect(),parent=element.closest('.available-action-tags').getBoundingClientRect();return {x:box.x-parent.x,y:box.y-parent.y}})
@@ -280,6 +283,13 @@ try {
     if(width<600) assert.ok(rowHeight<=84,'Mobile client rows should fit on one compact line')
   }
   await phone.page.setViewportSize({width:390,height:844})
+  const mobileFirst=phone.page.locator('.review-row').filter({hasText:'ALLEGRA'})
+  await mobileFirst.evaluate(element=>scrollTo({top:scrollY+element.getBoundingClientRect().top-180,behavior:'instant'}))
+  const mobileBefore=await phone.page.evaluate(()=>scrollY)
+  await mobileFirst.click()
+  await phone.page.waitForTimeout(450)
+  assert.ok(Math.abs(await phone.page.evaluate(()=>scrollY)-mobileBefore)<=2,'Mobile expansion must retain scroll position')
+  await phone.page.getByRole('button',{name:'Cerrar registro: ALLEGRA',exact:true}).click()
 
   await pc.page.evaluate(()=>{
     window.pageFrames=[];window.samplePages=true
@@ -305,6 +315,29 @@ try {
     assert.equal((await PDFDocument.load(pdf)).getPageCount(),1,'Reports with story days must remain one A4 page')
   }
   console.log('Wide compact layout, story days, unclipped mobile dropdown, sequential page animation and A4/PNG reports passed')
+  // Long fixture: physical pagination must add pages, preserve content and retain 10.5 pt type.
+  const marker='ULTIMO_REGISTRO_CONSERVADO'
+  for(let index=0;index<35;index++) {
+    const id=`long-review-${index}`,clientId=`visual-client-${index}`
+    const note=index===34?marker:'Se ajustaron las campañas y se revisaron los resultados de la cuenta. '.repeat(index===0?100:3)
+    const row=make('review',id,{id,clientId,date:today,createdAt:new Date().toISOString(),actions:'Se verificaron anuncios y presupuestos.',observations:note})
+    rows.set(key(row),row);broadcast(row)
+  }
+  await pc.page.waitForFunction(()=>document.querySelector('.report-summary strong')?.textContent==='39')
+  await pc.page.waitForFunction(()=>document.querySelector('.print-paper')?.dataset.layoutReady==='true'&&document.querySelectorAll('.print-paper [data-export-page]').length>1&&document.querySelector('.print-paper')?.textContent?.includes('ULTIMO_REGISTRO_CONSERVADO'))
+  const physical=await pc.page.locator('.print-paper [data-export-page]').evaluateAll(pages=>pages.map(page=>({font:parseFloat(getComputedStyle(page.querySelector('article p')).fontSize),columns:[...page.querySelectorAll('.detail-column')].map(column=>({height:column.clientHeight,used:column.scrollHeight})),footer:page.querySelector('footer').textContent})))
+  assert.ok(physical.every(page=>Math.abs(page.font-14)<.1),'10.5 pt must stay fixed, never scaled down')
+  assert.ok(physical.every(page=>page.columns.every(column=>column.used<=column.height+1)),'No column may clip its text')
+  const longPdf=await pc.page.pdf({path:path.join(output,'detalle-largo.pdf'),preferCSSPageSize:true,printBackground:true})
+  assert.equal((await PDFDocument.load(longPdf)).getPageCount(),physical.length,'PDF must have exactly the measured number of sheets, without blank pages')
+  const pendingLong=pc.page.waitForEvent('download')
+  await pc.page.getByRole('button',{name:'Descargar PNG',exact:true}).click()
+  const longDownload=await pendingLong
+  await longDownload.saveAs(path.join(output,'detalle-largo.png'))
+  const longPng=await readFile(path.join(output,'detalle-largo.png'))
+  assert.ok(Math.abs(longPng.readUInt32BE(20)/longPng.readUInt32BE(16)-physical.length*297/210)<.03,'PNG must include every page, not just the first')
+  await pc.page.screenshot({path:path.join(output,'detalle-preview.png'),fullPage:true})
+  console.log(`Two-column detail: ${physical.length} physical pages, fixed type, complete PNG and no clipped text passed`)
   await pc.page.emulateMedia({reducedMotion:'reduce'})
   await pc.page.getByRole('navigation',{name:'Navegación principal'}).getByRole('button',{name:'Clientes',exact:true}).click()
   await pc.page.getByRole('heading',{name:'Clientes',exact:true}).waitFor()
@@ -315,7 +348,7 @@ try {
   await pc.page.getByRole('button',{name:'Histórico mensual',exact:true}).click()
   await pc.page.getByLabel('Mes',{exact:true}).fill('2026-01')
   await pc.page.waitForFunction(()=>document.querySelector('.report-summary strong')?.textContent==='0')
-  assert.equal(await pc.page.locator('.print-paper header small').textContent(),'MES')
+  assert.equal(await pc.page.locator('.print-paper [data-export-page] header small').first().textContent(),'MES')
   await mkdir(output,{recursive:true})
   await pc.page.screenshot({path:path.join(output,'monthly-cloud.png'),fullPage:true})
   await phone.page.screenshot({path:path.join(output,'mobile-synced.png'),fullPage:true})
