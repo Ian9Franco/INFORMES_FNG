@@ -7,6 +7,8 @@ import '../rapid-review.css'
 import '../interface-polish.css'
 import '../personalization.css'
 import '../report-detail.css'
+import '../review-feedback.css'
+import '../mobile-navigation.css'
 export const metadata: Metadata = {
   title: 'Informes FNG',
   description: 'Seguimiento de clientes, revisiones, pendientes e informes publicitarios',

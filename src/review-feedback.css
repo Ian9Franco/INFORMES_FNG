@@ -1,0 +1,66 @@
+:root {
+  --save-bg: #28513e;
+  --save-ink: #fffdf5;
+  --save-hover: #1d3f30;
+  --save-next-bg: #e0eadb;
+  --save-next-ink: #254d38;
+  --save-next-border: #5b785f;
+}
+:root[data-theme='dark'] {
+  --save-bg: #c0e4b5;
+  --save-ink: #15271b;
+  --save-hover: #d5efcd;
+  --save-next-bg: #344d3c;
+  --save-next-ink: #e5f4df;
+  --save-next-border: #85a680;
+}
+@media screen {
+  .rapid-save-bar .save-button, .review-modal .save-button { color: var(--save-ink); background: var(--save-bg); font-weight: 700; border: 1px solid transparent; box-shadow: var(--shadow-raised); }
+  .rapid-save-bar .save-button:hover, .review-modal .save-button:hover { color: var(--save-ink); background: var(--save-hover); }
+  .rapid-save-bar .save-next-button, .review-modal .save-next-button { color: var(--save-next-ink); background: var(--save-next-bg); border: 1px solid var(--save-next-border); box-shadow: inset 0 1px 0 var(--rim); font-weight: 650; }
+  .rapid-save-bar .save-next-button:hover, .review-modal .save-next-button:hover { color: var(--save-next-ink); background: var(--save-next-bg); box-shadow: var(--shadow-raised); }
+  :is(.rapid-save-bar,.review-modal) :is(.save-button,.save-next-button):focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .rapid-save-bar .save-button, .rapid-save-bar .save-next-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+  :is(.rapid-save-bar,.review-modal) :is(.save-button,.save-next-button) { transition: scale .36s cubic-bezier(.34,1.56,.64,1), box-shadow .18s ease; }
+  .rapid-review { padding: 0; }
+  .rapid-review-content { display: flow-root; padding: 4px 4px 14px; transform-origin: 50% 0; }
+  .review-item, .review-item.is-expanded { isolation: isolate; padding: 0 12px; margin-inline: -12px; border-radius: 18px; transition: box-shadow .32s ease; }
+  .review-item.is-expanded, .review-item:has(.rapid-review) { background: transparent; }
+  .review-item::after { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; background: var(--surface-soft); opacity: 0; transition: opacity .32s ease; }
+  .review-item:has(.rapid-review)::after { opacity: 1; }
+  .review-item:has(.rapid-review)::before, .review-item:has(.rapid-review) + .review-item::before { background: transparent; }
+  .review-row > .icon { transition: rotate .4s cubic-bezier(.22,.7,.2,1); }
+  .review-state { flex: none; transition: color .3s, background-color .3s; }
+  .review-state > .review-state-symbol { display: grid; place-items: center; width: 100%; height: 100%; background: none; border-radius: inherit; }
+  .review-state-dot { width: 6px; height: 6px; background: currentColor; border-radius: 50%; }
+  .review-state-label { display: inline-grid; place-items: center; min-width: 65px; transition: background-color .3s, color .3s; }
+  .review-state-label > span { display: block; }
+  .review-modal[open] { transform-origin: 50% 85%; animation: review-sheet-in .52s cubic-bezier(.2,.72,.2,1) both; }
+  .review-modal[open]::backdrop { animation: review-backdrop-in .32s ease both; }
+  .review-modal.is-closing[open] { animation: review-sheet-out .34s cubic-bezier(.4,0,.25,1) both; pointer-events: none; }
+  .review-modal.is-closing[open]::backdrop { animation: review-backdrop-out .34s ease both; }
+  .review-modal[open]:not(.is-closing) > header { animation: review-content-in .36s .05s both; }
+  .review-modal[open]:not(.is-closing) > .review-modal-body { animation: review-content-in .4s .09s both; }
+  .review-modal[open]:not(.is-closing) > footer { animation: review-content-in .36s .13s both; }
+  .review-modal.is-closing > :is(header,.review-modal-body,footer) { animation: review-content-out .18s ease both; }
+  @keyframes review-sheet-in {
+    0% { opacity: 0; transform: translateY(28px) scale(.965,.94); }
+    62% { opacity: 1; transform: translateY(-3px) scale(1.008,1.018); }
+    82% { opacity: 1; transform: translateY(1px) scale(.998,.995); }
+    100% { opacity: 1; transform: none; }
+  }
+  @keyframes review-sheet-out {
+    0% { opacity: var(--review-close-opacity,1); transform: var(--review-close-transform,none); }
+    24% { opacity: 1; transform: translateY(2px) scale(1.012,.98); }
+    100% { opacity: 0; transform: translateY(24px) scale(.96,.93); }
+  }
+  @keyframes review-content-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes review-content-out { from { opacity: var(--review-content-opacity,1); transform: var(--review-content-transform,none); } to { opacity: 0; transform: translateY(-3px); } }
+  @keyframes review-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes review-backdrop-out { from { opacity: var(--review-close-backdrop,1); } to { opacity: 0; } }
+  @media (max-width: 600px) { .review-state-label { display: none; } .review-modal[open] { transform-origin: 50% 100%; } }
+  @media (prefers-reduced-motion: reduce) {
+    .review-modal[open], .review-modal[open]::backdrop, .review-modal[open] > :is(header,.review-modal-body,footer) { animation: none !important; transform: none !important; }
+    .review-item, .review-item::after, .review-state, .review-state-label, .review-row > .icon { transition: none; }
+  }
+}

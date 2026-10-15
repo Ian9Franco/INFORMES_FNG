@@ -25,6 +25,25 @@ let writes = 0
 const sockets = new Set()
 const errors = []
 const pages = []
+async function sampleMotion(page, selector) {
+  await page.evaluate(selector=>{
+    window.feedbackFrames=[];window.feedbackSampling=true
+    const sample=()=>{
+      if(!window.feedbackSampling)return
+      const element=document.querySelector(selector)
+      const content=element?.querySelector('.rapid-review-content')
+      window.feedbackFrames.push(element?{height:element.getBoundingClientRect().height,opacity:Number(getComputedStyle(element).opacity),transform:getComputedStyle(element).transform,inert:element.inert,innerOpacity:content?Number(getComputedStyle(content).opacity):null}:null)
+      requestAnimationFrame(sample)
+    };sample()
+  },selector)
+}
+async function finishMotion(page) { return page.evaluate(()=>{window.feedbackSampling=false;return window.feedbackFrames}) }
+async function assertSaveContrast(page) {
+  const values=await page.locator('.rapid-save-bar :is(.save-button,.save-next-button)').evaluateAll(buttons=>buttons.map(button=>({color:getComputedStyle(button).color,background:getComputedStyle(button).backgroundColor})))
+  const luminance=rgb=>rgb.match(/[\d.]+/g).slice(0,3).map(value=>Number(value)/255).map(value=>value<=.04045?value/12.92:((value+.055)/1.055)**2.4).reduce((sum,value,index)=>sum+value*[.2126,.7152,.0722][index],0)
+  assert.equal(values.length,2)
+  for(const value of values) { const levels=[luminance(value.color),luminance(value.background)].sort((a,b)=>b-a); assert.ok((levels[0]+.05)/(levels[1]+.05)>=7,'Actual save-button foreground/background must exceed 7:1') }
+}
 function broadcast(row) {
   for (const ws of sockets) ws.send(JSON.stringify([null,null,`realtime:workspace:${uid}`,'postgres_changes',{ids:[1],data:{schema:'public',table:'fng_records',type:row.version===1?'INSERT':'UPDATE',columns:[],record:row,old_record:{}}}]))
 }
@@ -89,14 +108,40 @@ try {
   assert.ok((await pc.page.locator('.workspace').boundingBox()).width>1650,'Desktop must use the available width')
   assert.ok((await pc.page.locator('.daily-overview').boundingBox()).height<160,'Daily overview should be compact')
   assert.equal(await pc.page.locator('.review-list').evaluate(element=>getComputedStyle(element).backgroundImage),'none','No repeated lines behind client rows')
+  await sampleMotion(pc.page,'dialog.review-modal')
+  await pc.page.getByRole('button',{name:'Registrar revisión',exact:true}).click()
+  await pc.page.locator('dialog.review-modal[open]').waitFor()
+  await pc.page.waitForTimeout(600)
+  const modalOpening=(await finishMotion(pc.page)).filter(Boolean)
+  assert.ok(modalOpening.some(frame=>frame.opacity>0&&frame.opacity<.95),'Modal must reveal progressively')
+  await sampleMotion(pc.page,'dialog.review-modal')
+  await pc.page.keyboard.press('Escape')
+  await pc.page.locator('dialog.review-modal').waitFor({state:'detached'})
+  const modalClosing=(await finishMotion(pc.page)).filter(Boolean)
+  assert.ok(modalClosing.some(frame=>frame.inert&&frame.opacity>0&&frame.opacity<.95),'Modal remains mounted and inert until the progressive exit completes')
+  // An immediate close must continue from the current opening transform, not jump to full size.
+  await pc.page.getByRole('button',{name:'Registrar revisión',exact:true}).click()
+  await pc.page.locator('dialog.review-modal[open]').waitFor()
+  await pc.page.waitForTimeout(40)
+  await pc.page.keyboard.press('Escape')
+  assert.ok(await pc.page.locator('dialog.review-modal').evaluate(element=>Boolean(element.style.getPropertyValue('--review-close-transform'))))
+  await pc.page.locator('dialog.review-modal').waitFor({state:'detached'})
+  await sampleMotion(pc.page,'.review-item[data-client-id="a"] .review-state')
   await pc.page.getByRole('button',{name:'Revisado sin cambios: ALLEGRA',exact:true}).click()
   await phone.page.waitForFunction(()=>document.querySelector('.metrics-grid strong')?.textContent==='1')
+  const confirmationFrames=(await finishMotion(pc.page)).filter(Boolean)
+  assert.ok(confirmationFrames.some(frame=>frame.transform!=='none'&&frame.transform!=='matrix(1, 0, 0, 1, 0, 0)'),'Client confirmation must have an elastic state transition')
   await pc.page.getByRole('button',{name:'Deshacer',exact:true}).click()
   await phone.page.waitForFunction(()=>document.querySelector('.metrics-grid strong')?.textContent==='0')
   writes=0
   const beforeExpand=await pc.page.evaluate(()=>scrollY)
+  await sampleMotion(pc.page,'.rapid-review')
   await pc.page.getByRole('button',{name:'Registrar acciones: JONDE',exact:true}).click()
-  await pc.page.waitForTimeout(450)
+  await pc.page.waitForTimeout(550)
+  const openingFrames=(await finishMotion(pc.page)).filter(Boolean)
+  const fullHeight=Math.max(...openingFrames.map(frame=>frame.height))
+  assert.ok(openingFrames.some(frame=>frame.height>1&&frame.height<fullHeight*.9),'Inline panel must unfold progressively')
+  assert.ok(openingFrames.some(frame=>frame.innerOpacity>0&&frame.innerOpacity<.95),'Content must progressively reveal rather than swap')
   assert.ok(Math.abs(await pc.page.evaluate(()=>scrollY)-beforeExpand)<=2,'Expanding a client must not scroll the reading position')
   assert.equal(await pc.page.locator('dialog').count(),0,'Inline register must not open a modal')
   const deletedTag=pc.page.locator('.available-action-tags button[data-action-type-id="meta.ad.deleted"]')
@@ -120,7 +165,11 @@ try {
   assert.equal(await pc.page.getByLabel('Cantidad: Añadí anuncios',{exact:true}).inputValue(),'2')
   assert.match(await pc.page.locator('.story-day-trigger').textContent(),/Lun · Jue/)
   assert.equal(await pc.page.locator('.metrics-grid strong').first().textContent(),'0')
+  await sampleMotion(pc.page,'.rapid-review')
   await pc.page.getByRole('button',{name:'Cerrar registro: JONDE',exact:true}).click()
+  await pc.page.locator('.rapid-review').waitFor({state:'detached'})
+  const closingFrames=(await finishMotion(pc.page)).filter(Boolean)
+  assert.ok(closingFrames.some(frame=>frame.inert&&frame.height>1),'Closing editor remains mounted, animates and cannot accept actions')
   console.log('One-tap review/undo sync, stable tags and reload-safe unconfirmed draft passed')
   await review(pc.page,'JONDE','Registro de PC')
   await pc.page.getByRole('button',{name:'Guardar revisión',exact:true}).click()
@@ -178,6 +227,14 @@ try {
   await phone.page.getByLabel('Cantidad: Actualicé keywords',{exact:true}).fill('3')
   await phone.page.locator('.rapid-details > summary').click()
   await phone.page.getByLabel('Nuevo pendiente',{exact:true}).fill('Controlar keywords mañana')
+  await assertSaveContrast(phone.page)
+  await phone.page.getByRole('button',{name:'Activar tema oscuro',exact:true}).click()
+  await phone.page.waitForTimeout(220)
+  await assertSaveContrast(phone.page)
+  await mkdir(output,{recursive:true})
+  await phone.page.screenshot({path:path.join(output,'mobile-save-dark.png'),fullPage:false})
+  await phone.page.getByRole('button',{name:'Activar tema claro',exact:true}).click()
+  await phone.page.waitForTimeout(400)
   const saveBounds=await phone.page.locator('.rapid-save-bar').boundingBox()
   assert.ok(saveBounds.y>=0 && saveBounds.y+saveBounds.height<=844,'Save bar remains in the mobile viewport')
   await mkdir(output,{recursive:true})
@@ -278,7 +335,14 @@ try {
   await phone.page.screenshot({path:path.join(output,'mobile-compact-dark.png'),fullPage:false})
   for(const width of [320,390,768]) {
     await phone.page.setViewportSize({width,height:844})
+    await phone.page.waitForTimeout(550)
     assert.equal(await phone.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`No horizontal clipping at ${width}px`)
+    const dock=await phone.page.getByRole('navigation',{name:'Navegación principal'}).evaluate(nav=>{
+      const bounds=nav.getBoundingClientRect(),selected=nav.querySelector('.active .navigation-highlight').getBoundingClientRect()
+      return {center:(bounds.left+bounds.right)/2,height:bounds.height,leftGap:selected.left-bounds.left,rightGap:bounds.right-selected.right,blur:getComputedStyle(nav).backdropFilter,centered:[...nav.querySelectorAll('button')].every(button=>{const bounds=button.getBoundingClientRect(),icon=button.querySelector('.navigation-icon').getBoundingClientRect(),label=button.querySelector('.navigation-label').getBoundingClientRect();return Math.abs((icon.left+icon.right-bounds.left-bounds.right)/2)<1&&Math.abs((label.left+label.right-bounds.left-bounds.right)/2)<1})}
+    })
+    assert.ok(Math.abs(dock.center-width/2)<1&&dock.height>=80&&dock.leftGap>=9&&dock.rightGap>=9,'Mobile dock and selection need centered geometry and breathing room')
+    assert.ok(dock.centered&&dock.blur.includes('blur'),'Icons/labels must center, and the liquid dock must retain blur')
     const rowHeight=(await phone.page.locator('.review-item').first().boundingBox()).height
     if(width<600) assert.ok(rowHeight<=84,'Mobile client rows should fit on one compact line')
   }
@@ -339,6 +403,11 @@ try {
   await pc.page.screenshot({path:path.join(output,'detalle-preview.png'),fullPage:true})
   console.log(`Two-column detail: ${physical.length} physical pages, fixed type, complete PNG and no clipped text passed`)
   await pc.page.emulateMedia({reducedMotion:'reduce'})
+  await pc.page.getByRole('button',{name:'Registrar revisión',exact:true}).click()
+  await pc.page.locator('dialog.review-modal[open]').waitFor()
+  assert.equal(await pc.page.locator('dialog.review-modal').evaluate(dialog=>getComputedStyle(dialog).animationName),'none')
+  await pc.page.keyboard.press('Escape')
+  await pc.page.locator('dialog.review-modal').waitFor({state:'detached'})
   await pc.page.getByRole('navigation',{name:'Navegación principal'}).getByRole('button',{name:'Clientes',exact:true}).click()
   await pc.page.getByRole('heading',{name:'Clientes',exact:true}).waitFor()
   assert.equal(await pc.page.locator('.notebook-page').count(),1)

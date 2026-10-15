@@ -5,6 +5,10 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — mejoras continuas
 
 ### Interfaz operativa
+- Guardar con tratamiento sólido de alto contraste y «Guardar y siguiente» tonal con borde visible, en claro/oscuro; contraste de texto superior a 7:1 y cambios de tema sin interpolar colores de estos botones.
+- Apertura/cierre progresivos del registro rápido, contenido y barra fija, con deformación elástica suave; estado del cliente con check trazado, pulso squishy y etiqueta animada, sin repetir al recibir el eco del guardado.
+- Modal escalonado y cierre ligado al final real de la animación, conservando el diálogo/foco e inhabilitando controles durante la salida; cerrar durante la entrada parte del estado visual actual. Respeto de movimiento reducido.
+- Navegación móvil de vidrio con ancho explícito, centrado, más espacio interior, iconos/textos alineados e indicador líquido; blur con fallback opaco y separación respecto de la barra de guardar.
 - Detallado compacto en dos columnas de 10,5 pt: paginación A4 medida, clientes juntos cuando entran, continuación para notas extensas y pies numerados; se omiten etiquetas vacías sin perder acciones/notas.
 - Vista previa/PDF comparten páginas físicas; el PNG detallado contiene todas las hojas en una imagen vertical, con límites de memoria para históricos muy largos. La planilla normal mantiene una sola hoja.
 - Jornada conserva la posición al desplegar clientes: se elimina el scroll automático de apertura y se desactiva el anclaje de las filas; «Guardar y siguiente» sigue ubicando el próximo cliente.

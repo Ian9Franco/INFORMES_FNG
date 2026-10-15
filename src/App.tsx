@@ -14,6 +14,7 @@ import CompanionAccess from './components/CompanionAccess'
 import QuickActions from './components/QuickActions'
 import ReviewDetailsFields from './components/ReviewDetailsFields'
 import RapidReviewSection from './components/RapidReviewSection'
+import { NavigationIndicator, RapidSaveBar, ReviewState, ReviewStateLabel } from './components/ReviewFeedback'
 import NotebookPage from './components/NotebookPage'
 import { draftChanged, draftKey, nextPendingClient, readDrafts, reviewSignature, type ReviewDrafts } from './review-workflow'
 import { AnimatedChart } from './components/AnimatedSymbols'
@@ -131,7 +132,6 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const [closingReview, setClosingReview] = useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const saveBarRef = useRef<HTMLDivElement>(null)
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rowScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scrollPositions = useRef<Partial<Record<Tab, number>>>({})
   const selectedOpen = selected?.mode === 'modal'
@@ -205,16 +205,35 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   }
 
   function closeReview(force = false) {
-    if (closingReview) return
+    if (!selected || closingReview) return
     if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current)
     if (!force) stashDraft()
     if (selected?.mode === 'inline') { setSelected(null); return }
+    const dialog = dialogRef.current
+    if (dialog) {
+      const style = getComputedStyle(dialog)
+      dialog.style.setProperty('--review-close-transform', style.transform)
+      dialog.style.setProperty('--review-close-opacity', style.opacity)
+      dialog.style.setProperty('--review-close-backdrop', getComputedStyle(dialog, '::backdrop').opacity)
+      for (const child of dialog.querySelectorAll<HTMLElement>(':scope > header,:scope > .review-modal-body,:scope > footer')) {
+        const current = getComputedStyle(child)
+        child.style.setProperty('--review-content-transform', current.transform)
+        child.style.setProperty('--review-content-opacity', current.opacity)
+      }
+    }
     setClosingReview(true)
-    closeTimer.current = setTimeout(() => {
-      setSelected(null)
-      setClosingReview(false)
-    }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180)
   }
+
+  useEffect(() => {
+    if (!closingReview) return
+    let alive = true
+    const animations = calm ? [] : dialogRef.current?.getAnimations().filter(animation => animation instanceof CSSAnimation && animation.animationName === 'review-sheet-out') ?? []
+    // Keep the native dialog and its focus trap until the real exit animation ends.
+    void Promise.all(animations.map(animation => animation.finished.catch(() => {}))).then(() => {
+      if (alive) { setSelected(null); setClosingReview(false) }
+    })
+    return () => { alive = false }
+  }, [closingReview, calm])
 
   useEffect(() => {
     if (!selectedOpen) return
@@ -243,7 +262,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     }
   }, [selectedOpen])
 
-  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current) }, [])
+  useEffect(() => () => { if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current) }, [])
   useEffect(() => {
     if (selected?.mode !== 'inline') return
     const viewport = window.visualViewport
@@ -529,7 +548,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     <header className="app-navigation screen">
       <div className="wordmark"><span className="wordmark-symbol">f.</span><div><strong>Informes FNG</strong><small>Mi libreta de trabajo</small></div></div>
       <LayoutGroup id="workspace-navigation"><nav aria-label="Navegación principal">
-        {navItems.map(item => <motion.button whileHover={calm ? undefined : { scale: 1.035 }} whileTap={calm ? undefined : { scaleX: 1.06, scaleY: .9 }} transition={{ type: 'spring', stiffness: 450, damping: 18, mass: .55 }} key={item.id} aria-current={tab === item.id ? 'page' : undefined} className={tab === item.id ? 'active' : ''} onClick={() => navigate(item.id)}>{tab === item.id ? <motion.span className="navigation-highlight" layoutId="active-navigation" transition={calm ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 36 }} /> : null}<span className="navigation-icon">{item.id === 'jornada' ? <AnimatedChart active={tab === item.id} /> : <Icon name={item.icon} />}</span><span className="navigation-label">{item.label}</span>{item.id === 'jornada' && pending.length > 0 ? <b>{pending.length}</b> : null}</motion.button>)}
+        {navItems.map(item => <motion.button whileHover={calm ? undefined : { scale: 1.035 }} whileTap={calm ? undefined : { scaleX: 1.06, scaleY: .9 }} transition={{ type: 'spring', stiffness: 450, damping: 18, mass: .55 }} key={item.id} aria-current={tab === item.id ? 'page' : undefined} className={tab === item.id ? 'active' : ''} onClick={() => navigate(item.id)}>{tab === item.id ? <NavigationIndicator /> : null}<span className="navigation-icon">{item.id === 'jornada' ? <AnimatedChart active={tab === item.id} /> : <Icon name={item.icon} />}</span><span className="navigation-label">{item.label}</span>{item.id === 'jornada' && pending.length > 0 ? <b>{pending.length}</b> : null}</motion.button>)}
       </nav></LayoutGroup>
       <div className="navigation-tools"><ThemeToggle />{headerTools ?? <span className="storage-indicator">Guardado local</span>}</div>
     </header>
@@ -569,9 +588,9 @@ export default function App({ initialData, onChange, storageMode = 'local', user
               const dayClosed = db.closed.includes(monday(date(today)))
               return <article key={clientItem.id} data-client-id={clientItem.id} className={`review-item ${expanded ? 'is-expanded' : ''}`}>
               <div className="review-row-header"><button className="review-row" aria-expanded={expanded} aria-controls={`rapid-${clientItem.id}`} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline')}>
-                <span className={`review-state ${reviewItem ? 'done' : ''}`}>{reviewItem ? <Icon name="check" /> : <span />}</span>
+                <ReviewState reviewed={Boolean(reviewItem)} />
                 <span className="review-name"><strong>{clientItem.name}</strong><small>{reviewItem ? `${storyDaysLabel([reviewItem]) ? `Historia → ${storyDaysLabel([reviewItem])} · ` : ''}${storyDaysLabel([reviewItem], true, 'meta.post.scheduled') ? `Publicación → ${storyDaysLabel([reviewItem], true, 'meta.post.scheduled')} · ` : ''}${describeReviewActions(reviewItem) || reviewItem.observations || 'Revisión registrada'}` : 'Todavía sin revisar'}</small></span>
-                <span className={`state-pill ${reviewItem ? 'done' : ''}`}>{hasDraft ? 'Borrador' : reviewItem ? 'Revisado' : 'Pendiente'}</span>
+                <ReviewStateLabel reviewed={Boolean(reviewItem)} label={hasDraft ? 'Borrador' : reviewItem ? 'Revisado' : 'Pendiente'} />
                 <Icon name="chevron-right" />
               </button>
               <div className="review-row-tools">{!reviewItem ? <button type="button" className="one-touch-review" disabled={dayClosed || hasDraft || expanded} onClick={() => reviewWithoutChanges(clientItem.id)} aria-label={`Revisado sin cambios: ${clientItem.name}`}><Icon name="check" size={15} /><span>Sin cambios</span></button> : null}<button type="button" className="quick-register" disabled={dayClosed} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline')} aria-label={`${expanded ? 'Cerrar registro' : reviewItem ? 'Editar revisión' : 'Registrar acciones'}: ${clientItem.name}`}>{expanded ? 'Cerrar' : hasDraft ? 'Continuar' : reviewItem ? 'Editar' : 'Registrar'}</button></div></div>
@@ -646,10 +665,10 @@ export default function App({ initialData, onChange, storageMode = 'local', user
 
     <footer className="site-footer screen"><a href="https://ian-pontorno-portfolio.vercel.app" target="_blank" rel="noopener noreferrer">© {new Date().getFullYear()} Ian Pontorno<span>Diseño y desarrollo</span><ExternalLink size={13} aria-hidden="true" /></a><a className="repository-link" href="https://github.com/Ian9Franco/INFORMES_FNG" target="_blank" rel="noopener noreferrer" aria-label="Ver el código de Informes FNG en GitHub"><svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.49c-2.23.48-2.7-.95-2.7-.95-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.22.82 1.22.82.71 1.22 1.87.87 2.33.67.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.58.82-2.14-.08-.2-.36-1.02.08-2.12 0 0 .67-.22 2.2.82A7.65 7.65 0 0 1 8 3.87c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.14 0 3.07-1.87 3.75-3.65 3.95.29.25.54.74.54 1.49v2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z" /></svg><span>GitHub</span></a></footer>
 
-    {selected?.mode === 'inline' ? <div ref={saveBarRef} className="rapid-save-bar screen" onKeyDown={reviewShortcut}><div><strong>{client?.name}</strong><small>Borrador local · Ctrl/⌘ + Enter para guardar</small></div><button className="secondary-button" onClick={() => saveReview()} disabled={!client}>Guardar</button><button className="primary-button" onClick={() => saveReview(true)} disabled={!client}>Guardar y siguiente <Icon name="chevron-right" /></button></div> : null}
+    <AnimatePresence initial={false}>{selected?.mode === 'inline' ? <RapidSaveBar key="rapid-save" barRef={saveBarRef} onKeyDown={reviewShortcut}><div><strong>{client?.name}</strong><small>Borrador local · Ctrl/⌘ + Enter para guardar</small></div><button className="primary-button save-button" onClick={() => saveReview()} disabled={!client}><Icon name="check" size={16} />Guardar</button><button className="secondary-button save-next-button" onClick={() => saveReview(true)} disabled={!client}>Guardar y siguiente <Icon name="chevron-right" /></button></RapidSaveBar> : null}</AnimatePresence>
     {undoReview ? <div className="quick-undo screen" role="status"><span>{clients.find(item => item.id === undoReview.clientId)?.name} · revisado sin cambios</span><button type="button" onClick={undoQuickReview}>Deshacer</button></div> : null}
 
-    {selected?.mode === 'modal' ? <dialog ref={dialogRef} className={`review-modal screen ${closingReview ? 'is-closing' : ''}`} aria-labelledby="review-title" onKeyDown={reviewShortcut} onCancel={event => { event.preventDefault(); closeReview() }} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeReview() } }}>
+    {selected?.mode === 'modal' ? <dialog ref={dialogRef} className={`review-modal screen ${closingReview ? 'is-closing' : ''}`} aria-labelledby="review-title" inert={closingReview} onKeyDown={reviewShortcut} onCancel={event => { event.preventDefault(); closeReview() }} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeReview() } }}>
         <header><div><span className="section-kicker">REVISIÓN · {format(selected.day)}</span><h2 id="review-title">{client?.name ?? 'Nueva revisión'}</h2><p>Una revisión también cuenta si no hiciste cambios.</p></div><button className="icon-button" onClick={() => closeReview()} aria-label="Cerrar"><Icon name="close" /></button></header>
         <div className="review-modal-body">
         {reviewSignature(current) !== reviewSignature(formBase.current) ? <div className="draft-conflict" role="status">La revisión cambió. Conservamos tu borrador.<button type="button" onClick={reloadReview}>Cargar versión actual</button></div> : null}
@@ -657,7 +676,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
         <QuickActions clientId={selected?.id} catalog={db.customActions} onCreate={createAction} value={actionEntries} onChange={setActionEntries} storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
         <ReviewDetailsFields actions={actions} observations={observations} pendingText={pendingText} onActions={setActions} onObservations={setObservations} onPending={setPendingText} onAddPending={addPending} />
         </div>
-        <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : null}<div><button className="secondary-button" onClick={() => closeReview()}>Salir</button><button className="primary-button" disabled={!client || closingReview} onClick={() => saveReview()}><Icon name="check" />Guardar revisión</button><button className="secondary-button" disabled={!client || closingReview} onClick={() => saveReview(true)}>Guardar y siguiente</button></div></footer>
+        <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : null}<div><button className="secondary-button" onClick={() => closeReview()}>Salir</button><button className="primary-button save-button" disabled={!client || closingReview} onClick={() => saveReview()}><Icon name="check" />Guardar revisión</button><button className="secondary-button save-next-button" disabled={!client || closingReview} onClick={() => saveReview(true)}>Guardar y siguiente</button></div></footer>
     </dialog> : null}
 
     <NotebookReport store={db} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} />
