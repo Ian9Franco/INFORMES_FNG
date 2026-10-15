@@ -6,6 +6,8 @@ import ThemeToggle from './components/ThemeToggle'
 import useConfirmation from './components/useConfirmation'
 import ClientPicker from './components/ClientPicker'
 import NotebookReport from './components/NotebookReport'
+import ReportPreview from './components/ReportPreview'
+import { activeReportStore, reportFileName } from './report-export'
 import { reconcileAccounts } from './account-catalog'
 import { newClient, sortClients } from './clients'
 import { ExternalLink } from 'lucide-react'
@@ -136,6 +138,8 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const scrollPositions = useRef<Partial<Record<Tab, number>>>({})
   const selectedOpen = selected?.mode === 'modal'
   const documentTitle = reportTitle.trim() || 'Informe Ian'
+  const restorePrintTitle = useRef<(() => void) | null>(null)
+  useEffect(() => () => restorePrintTitle.current?.(), [])
 
   useEffect(() => { try { localStorage.setItem('informe-fng-report-title', reportTitle) } catch { /* Title remains usable without storage. */ } }, [reportTitle])
 
@@ -146,7 +150,9 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const closed = db.closed.includes(week)
   const inWeek = db.reviews.filter(reviewItem => days.includes(reviewItem.date))
   const monthRange = monthBounds(reportMonth)
-  const reportReviews = reportPeriod === 'month' ? db.reviews.filter(review => review.date >= monthRange.start && review.date < monthRange.end) : inWeek
+  const reportStore = useMemo(() => activeReportStore(db), [db])
+  const reportReviews = reportStore.reviews.filter(review => reportPeriod === 'month' ? review.date >= monthRange.start && review.date < monthRange.end : days.includes(review.date))
+  const reportPending = reportStore.pending.filter(item => !item.resolved)
   const pending = db.pending.filter(item => !item.resolved)
   const reviewsToday = active.filter(clientItem => db.reviews.some(reviewItem => reviewItem.clientId === clientItem.id && reviewItem.date === today)).length
   const completion = active.length ? Math.round((reviewsToday / active.length) * 100) : 0
@@ -484,13 +490,27 @@ export default function App({ initialData, onChange, storageMode = 'local', user
       const pixelRatio = Math.min(3.125, 32760 / height, Math.sqrt(32000000 / (width * height)))
       const image = await toPng(paper, { width, height, pixelRatio, backgroundColor: '#ffffff', skipFonts: true, filter: node => !(node instanceof HTMLElement && node.classList.contains('detail-measure')), style: { position: 'static', left: '0', top: '0' } })
       const anchor = document.createElement('a')
-      anchor.download = `${documentTitle.replace(/[<>:"/\\|?*]/g, '-')} - ${reportPeriod === 'month' ? reportMonth : week} - ${printMode === 'grilla' ? 'semanal' : 'detallado'}.png`
+      anchor.download = `${reportFileName(documentTitle, reportPeriod, reportPeriod === 'month' ? reportMonth : week, printMode)}.png`
       anchor.href = image
       anchor.click()
       setNotice('Informe PNG descargado')
     } catch {
       setError('No se pudo generar la imagen. Intentá descargarla nuevamente.')
     } finally { setExportingImage(false) }
+  }
+
+  function printReport() {
+    restorePrintTitle.current?.()
+    const previous = document.title
+    const restore = () => {
+      document.title = previous
+      window.removeEventListener('afterprint', restore)
+      restorePrintTitle.current = null
+    }
+    restorePrintTitle.current = restore
+    window.addEventListener('afterprint', restore, { once: true })
+    document.title = reportFileName(documentTitle, reportPeriod, reportPeriod === 'month' ? reportMonth : week, printMode)
+    try { window.print() } catch { restore(); setError('No se pudo abrir el diálogo de impresión.') }
   }
 
   function importBackup(file: File) {
@@ -653,13 +673,13 @@ export default function App({ initialData, onChange, storageMode = 'local', user
           <div className="segmented" aria-label="Período del informe"><button className={reportPeriod === 'week' ? 'active' : ''} onClick={() => setReportPeriod('week')}>Semanal</button><button className={reportPeriod === 'month' ? 'active' : ''} onClick={() => setReportPeriod('month')}>Histórico mensual</button></div>
           {reportPeriod === 'week' ? <WeekPicker label={weekLabel} onPrevious={() => changeWeek(-1)} onNext={() => changeWeek(1)} /> : <label className="report-title-label">Mes<input type="month" className="report-title-input" value={reportMonth} onChange={event => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) setReportMonth(event.target.value) }} /></label>}
           <label className="report-title-label" htmlFor="report-title">Título del documento<input className="report-title-input" id="report-title" value={reportTitle} maxLength={80} onChange={event => setReportTitle(event.target.value)} placeholder="Informe Ian" /></label>
-          <div className="report-mode"><span className="section-kicker">FORMATO DEL INFORME</span><button className={printMode === 'grilla' ? 'active' : ''} onClick={() => setPrintMode('grilla')}><span><Icon name="calendar" /></span><div><strong>Planilla semanal</strong><small>Matriz de clientes por día</small></div><i>{printMode === 'grilla' ? <Icon name="check" size={14} /> : null}</i></button><button className={printMode === 'detalle' ? 'active' : ''} onClick={() => setPrintMode('detalle')}><span><Icon name="report" /></span><div><strong>Informe detallado</strong><small>Acciones y observaciones</small></div><i>{printMode === 'detalle' ? <Icon name="check" size={14} /> : null}</i></button></div>
-          <div className="report-summary"><div><span>Revisiones</span><strong>{reportReviews.length}</strong></div><div><span>Clientes cubiertos</span><strong>{new Set(reportReviews.map(item => item.clientId)).size}</strong></div><div><span>Pendientes</span><strong>{pending.length}</strong></div></div>
-          <div className="report-downloads"><button className="primary-button print-button" onClick={() => { const title = document.title; document.title = `${documentTitle} - ${week}`; window.print(); document.title = title }}><Icon name="print" />Imprimir o guardar PDF</button><button className="secondary-button" onClick={downloadPng} disabled={exportingImage}><Icon name="download" />{exportingImage ? 'Preparando imagen…' : 'Descargar PNG'}</button></div>
+          <div className="report-mode" role="group" aria-label="Formato del informe"><span className="section-kicker">FORMATO DEL INFORME</span><button className={printMode === 'grilla' ? 'active' : ''} aria-pressed={printMode === 'grilla'} onClick={() => setPrintMode('grilla')}><span><Icon name="calendar" /></span><div><strong>Simple</strong><small>{reportPeriod === 'month' ? 'Resumen de clientes del mes' : 'Matriz de clientes por día'}</small></div><i>{printMode === 'grilla' ? <Icon name="check" size={14} /> : null}</i></button><button className={printMode === 'detalle' ? 'active' : ''} aria-pressed={printMode === 'detalle'} onClick={() => setPrintMode('detalle')}><span><Icon name="report" /></span><div><strong>Detallado</strong><small>Acciones y observaciones</small></div><i>{printMode === 'detalle' ? <Icon name="check" size={14} /> : null}</i></button></div>
+          <div className="report-summary"><div><span>Revisiones</span><strong>{reportReviews.length}</strong></div><div><span>Clientes cubiertos</span><strong>{new Set(reportReviews.map(item => item.clientId)).size}</strong></div><div><span>Pendientes</span><strong>{reportPending.length}</strong></div></div>
+          <div className="report-downloads"><button className="primary-button print-button" onClick={printReport}><Icon name="print" />Imprimir o guardar PDF</button><button className="secondary-button" onClick={downloadPng} disabled={exportingImage}><Icon name="download" />{exportingImage ? 'Preparando imagen…' : 'Descargar PNG'}</button></div>
           <p className="helper-text">El navegador abrirá el diálogo de impresión. Elegí “Guardar como PDF” para generar el archivo.</p>
         </section>
 
-        <NotebookReport store={db} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} preview />
+        <ReportPreview store={reportStore} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} />
       </div> : null}
     </NotebookPage></AnimatePresence></div>
 
@@ -679,6 +699,6 @@ export default function App({ initialData, onChange, storageMode = 'local', user
         <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : null}<div><button className="secondary-button" onClick={() => closeReview()}>Salir</button><button className="primary-button save-button" disabled={!client || closingReview} onClick={() => saveReview()}><Icon name="check" />Guardar revisión</button><button className="secondary-button save-next-button" disabled={!client || closingReview} onClick={() => saveReview(true)}>Guardar y siguiente</button></div></footer>
     </dialog> : null}
 
-    <NotebookReport store={db} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} />
+    <div className="print-report-host"><NotebookReport store={reportStore} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} /></div>
   </div></MotionConfig>
 }

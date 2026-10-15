@@ -32,7 +32,7 @@ async function sampleMotion(page, selector) {
       if(!window.feedbackSampling)return
       const element=document.querySelector(selector)
       const content=element?.querySelector('.rapid-review-content')
-      window.feedbackFrames.push(element?{height:element.getBoundingClientRect().height,opacity:Number(getComputedStyle(element).opacity),transform:getComputedStyle(element).transform,inert:element.inert,innerOpacity:content?Number(getComputedStyle(content).opacity):null}:null)
+      window.feedbackFrames.push(element?{count:document.querySelectorAll(selector).length,height:element.getBoundingClientRect().height,opacity:Number(getComputedStyle(element).opacity),transform:getComputedStyle(element).transform,inert:element.inert,innerOpacity:content?Number(getComputedStyle(content).opacity):null}:null)
       requestAnimationFrame(sample)
     };sample()
   },selector)
@@ -255,12 +255,18 @@ try {
   console.log('Mobile fixed save, save-and-next, platform memory, pending task and keyboard shortcut passed')
 
   assert.equal(await pc.page.locator('.session-bar,.sync-bar,.storage-indicator').count(),0,'One header, no redundant status bars')
+  await sampleMotion(pc.page,'.account-menu')
   await pc.page.getByRole('button',{name:'Mi cuenta · DB activa',exact:true}).click()
   const accountMenu=pc.page.getByRole('dialog',{name:'Mi cuenta y sincronización',exact:true})
   await accountMenu.waitFor()
   assert.match(await accountMenu.textContent(),/qa@example.invalid/)
+  await pc.page.waitForTimeout(550)
+  assert.ok((await finishMotion(pc.page)).some(frame=>frame&&frame.opacity>0&&frame.opacity<.95),'Account menu opens progressively')
+  await sampleMotion(pc.page,'.account-menu')
   await pc.page.keyboard.press('Escape')
   await accountMenu.waitFor({state:'hidden'})
+  assert.ok((await finishMotion(pc.page)).some(frame=>frame&&frame.opacity>0&&frame.opacity<.95),'Native account menu must animate its exit too')
+  assert.equal(await pc.page.getByRole('button',{name:'Mi cuenta · DB activa',exact:true}).evaluate(button=>button===document.activeElement),true)
   await pc.page.getByRole('button',{name:'Editar revisión: JONDE',exact:true}).click()
   await pc.page.getByRole('button',{name:'Crear acción',exact:true}).click()
   let creator=pc.page.getByRole('group',{name:'Nueva acción personalizada',exact:true})
@@ -367,17 +373,35 @@ try {
   assert.ok(frames.some(frame=>frame.opacity.some(opacity=>opacity>0&&opacity<.99)),'Page change must animate rather than swap instantly')
   assert.ok(frames.some(frame=>frame.inert),'Exiting page must not accept clicks')
   await mkdir(output,{recursive:true})
-  for(const [label,suffix] of [['Planilla semanal','normal'],['Informe detallado','detallado']]) {
+  await pc.page.evaluate(()=>{window.printTitles=[];window.print=()=>{window.printTitles.push(document.title);window.dispatchEvent(new Event('afterprint'))}})
+  for(const [label,suffix] of [['Simple','simple'],['Detallado','detallado']]) {
+    await sampleMotion(pc.page,'.report-preview-page')
     await pc.page.getByRole('button',{name:label,exact:false}).click()
-    if(suffix==='normal') assert.match(await pc.page.locator('.print-paper .story-cell-note').first().textContent(),/Lun · Jue/)
+    await pc.page.waitForTimeout(750)
+    if(suffix==='detallado') {
+      const frames=await finishMotion(pc.page)
+      assert.ok(frames.some(frame=>frame&&frame.opacity>0&&frame.opacity<.95),'Report format change must have intermediate frames')
+      assert.ok(frames.filter(Boolean).every(frame=>frame.count===1),'No frame may overlap report formats')
+      assert.ok(frames.some(frame=>frame?.inert),'Exiting preview must not accept interaction')
+    }
+    else await finishMotion(pc.page)
+    assert.equal(await pc.page.locator('.report-preview-page').count(),1,'Report previews never overlap')
+    if(suffix==='simple') assert.match(await pc.page.locator('.print-paper .story-cell-note').first().textContent(),/Lun · Jue/)
     else assert.match(await pc.page.locator('.print-paper .report-content').textContent(),/para lunes, jueves/)
+    await pc.page.getByRole('button',{name:'Imprimir o guardar PDF',exact:true}).click()
+    assert.equal(await pc.page.title(),'Informes FNG','App title is restored after printing')
     const pendingDownload=pc.page.waitForEvent('download')
     await pc.page.getByRole('button',{name:'Descargar PNG',exact:true}).click()
     const download=await pendingDownload;const pngFile=path.join(output,`historias-${suffix}.png`);await download.saveAs(pngFile)
+    assert.match(download.suggestedFilename(),new RegExp(` - semanal \\d{4}-\\d{2}-\\d{2} - ${suffix}\\.png$`))
     const png=await readFile(pngFile);assert.ok(png.readUInt32BE(16)>=2475&&png.readUInt32BE(20)>=3500)
     const pdf=await pc.page.pdf({path:path.join(output,`historias-${suffix}.pdf`),preferCSSPageSize:true,printBackground:true})
     assert.equal((await PDFDocument.load(pdf)).getPageCount(),1,'Reports with story days must remain one A4 page')
   }
+  const printTitles=await pc.page.evaluate(()=>window.printTitles)
+  assert.equal(new Set(printTitles).size,2,'Simple and detailed PDF must suggest different filenames')
+  assert.match(printTitles[0],/ - semanal \d{4}-\d{2}-\d{2} - simple$/)
+  assert.match(printTitles[1],/ - semanal \d{4}-\d{2}-\d{2} - detallado$/)
   console.log('Wide compact layout, story days, unclipped mobile dropdown, sequential page animation and A4/PNG reports passed')
   // Long fixture: physical pagination must add pages, preserve content and retain 10.5 pt type.
   const marker='ULTIMO_REGISTRO_CONSERVADO'
@@ -401,7 +425,28 @@ try {
   const longPng=await readFile(path.join(output,'detalle-largo.png'))
   assert.ok(Math.abs(longPng.readUInt32BE(20)/longPng.readUInt32BE(16)-physical.length*297/210)<.03,'PNG must include every page, not just the first')
   await pc.page.screenshot({path:path.join(output,'detalle-preview.png'),fullPage:true})
+  assert.ok(await pc.page.evaluate(()=>Math.abs(document.documentElement.scrollHeight-Math.max(innerHeight,document.querySelector('.site-footer').getBoundingClientRect().bottom+scrollY))<3),'Hidden print sheets cannot extend the document below its footer')
   console.log(`Two-column detail: ${physical.length} physical pages, fixed type, complete PNG and no clipped text passed`)
+  const hiddenClient=make('client','report-archived',{id:'report-archived',name:'CLIENTE_ARCHIVADO_OCULTO',active:false})
+  rows.set(key(hiddenClient),hiddenClient);broadcast(hiddenClient)
+  for(const clientId of ['report-archived','report-deleted']) {
+    const review=make('review',`hidden-review-${clientId}`,{id:`hidden-review-${clientId}`,clientId,date:today,createdAt:new Date().toISOString(),actions:'ACCION_OCULTA_ARCHIVADA',observations:'NOTA_OCULTA_ELIMINADA'})
+    const task=make('task',`hidden-task-${clientId}`,{id:`hidden-task-${clientId}`,clientId,text:'PENDIENTE_OCULTO_ARCHIVADO',resolved:false})
+    rows.set(key(review),review);broadcast(review);rows.set(key(task),task);broadcast(task)
+  }
+  await pc.page.waitForFunction(()=>JSON.parse(localStorage.getItem('fng-cache:00000000-0000-4000-8000-000000000111')).reviews.some(review=>review.clientId==='report-deleted'))
+  for(const period of ['Semanal','Histórico mensual']) {
+    await pc.page.getByRole('button',{name:period,exact:true}).click()
+    for(const label of ['Simple','Detallado']) {
+      await pc.page.getByRole('button',{name:label,exact:false}).click()
+      await pc.page.waitForTimeout(750)
+      assert.doesNotMatch(await pc.page.locator('.print-paper').textContent(),/CLIENTE_ARCHIVADO_OCULTO|ACCION_OCULTA_ARCHIVADA|NOTA_OCULTA_ELIMINADA|PENDIENTE_OCULTO_ARCHIVADO|Cliente archivado/)
+      assert.doesNotMatch(await pc.page.locator('.report-preview-transition').textContent(),/CLIENTE_ARCHIVADO_OCULTO|ACCION_OCULTA_ARCHIVADA|NOTA_OCULTA_ELIMINADA|PENDIENTE_OCULTO_ARCHIVADO|Cliente archivado/)
+      assert.deepEqual(await pc.page.locator('.report-summary strong').allTextContents(),['39','39','1'],'Report totals must count only active-client reviews and pending tasks')
+    }
+  }
+  await pc.page.getByRole('button',{name:'Semanal',exact:true}).click()
+  console.log('Archived/deleted clients omitted in both formats and periods, including tasks and counters; stored history retained')
   await pc.page.emulateMedia({reducedMotion:'reduce'})
   await pc.page.getByRole('button',{name:'Registrar revisión',exact:true}).click()
   await pc.page.locator('dialog.review-modal[open]').waitFor()
@@ -418,6 +463,35 @@ try {
   await pc.page.getByLabel('Mes',{exact:true}).fill('2026-01')
   await pc.page.waitForFunction(()=>document.querySelector('.report-summary strong')?.textContent==='0')
   assert.equal(await pc.page.locator('.print-paper [data-export-page] header small').first().textContent(),'MES')
+  for(const [label,suffix] of [['Simple','simple'],['Detallado','detallado']]) {
+    await pc.page.getByRole('button',{name:label,exact:false}).click()
+    await pc.page.getByRole('button',{name:'Imprimir o guardar PDF',exact:true}).click()
+    assert.match(await pc.page.evaluate(()=>window.printTitles.at(-1)),new RegExp(` - mensual 2026-01 - ${suffix}$`))
+  }
+  assert.equal(await pc.page.getByRole('button',{name:'Planilla semanal',exact:false}).count(),0)
+  await pc.page.getByRole('button',{name:'Simple',exact:false}).click()
+  assert.match(await pc.page.locator('.report-mode').textContent(),/Resumen de clientes del mes/)
+  await phone.page.getByRole('navigation',{name:'Navegación principal'}).getByRole('button',{name:'Informes',exact:true}).click()
+  await phone.page.getByRole('heading',{name:'Informes',exact:true}).waitFor()
+  await phone.page.waitForTimeout(650)
+  for(const theme of ['light','dark']) {
+    await phone.page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme)
+    await phone.page.waitForTimeout(450)
+    await phone.page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight))
+    const spacing=await phone.page.evaluate(()=>{const footer=document.querySelector('.site-footer'),preview=document.querySelector('.report-preview-transition'),nav=document.querySelector('.app-navigation nav');const f=footer.getBoundingClientRect(),p=preview.getBoundingClientRect(),n=nav.getBoundingClientRect();return {gap:f.top-p.bottom,tail:document.documentElement.scrollHeight-(f.bottom+scrollY),links:[...footer.querySelectorAll('a')].map(a=>({y:a.getBoundingClientRect().y,bottom:a.getBoundingClientRect().bottom})),nav:n.top,overflow:document.documentElement.scrollWidth-innerWidth}})
+    assert.ok(spacing.gap<40,'Footer follows the report without duplicated mobile clearance')
+    assert.ok(Math.abs(spacing.tail)<3,'No extra white canvas below footer')
+    assert.ok(Math.abs(spacing.links[0].y-spacing.links[1].y)<2,'Copyright and GitHub share one mobile row')
+    assert.ok(spacing.links.every(link=>link.bottom<spacing.nav),'Footer links clear the floating mobile dock')
+    assert.ok(spacing.overflow<=0,'No horizontal overflow')
+    await phone.page.screenshot({path:path.join(output,`report-footer-${theme}.png`),fullPage:false})
+  }
+  for(const width of [320,768]) {
+    await phone.page.setViewportSize({width,height:844})
+    await phone.page.waitForTimeout(300)
+    await phone.page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight))
+    assert.ok(await phone.page.locator('.site-footer').evaluate(footer=>{const links=[...footer.querySelectorAll('a')].map(a=>a.getBoundingClientRect());return Math.abs(links[0].y-links[1].y)<2&&document.documentElement.scrollWidth<=innerWidth}),'Footer must stay compact and unwrapped at narrow/tablet widths')
+  }
   await mkdir(output,{recursive:true})
   await pc.page.screenshot({path:path.join(output,'monthly-cloud.png'),fullPage:true})
   await phone.page.screenshot({path:path.join(output,'mobile-synced.png'),fullPage:true})

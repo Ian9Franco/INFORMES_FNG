@@ -1,0 +1,43 @@
+@media screen {
+  /* Hidden physical sheets must not enlarge the screen's scrollable canvas. */
+  .print-report-host, .detail-measure { position: fixed; inset: 0 auto auto 0; width: 0; height: 0; overflow: clip; contain: strict; pointer-events: none; visibility: hidden; }
+  .print-report-host .print-paper { position: absolute; left: 0; top: 0; width: 210mm; visibility: visible; }
+  .app-shell { display: flex; flex-direction: column; min-height: 100svh; }
+  .app-navigation { flex: none; }
+  .notebook-pages { flex: 1; min-height: 0; }
+  .workspace { padding-bottom: 24px; }
+  .site-footer { width: 100%; flex: none; justify-content: center; gap: 24px; padding-block: 12px 20px; }
+  .site-footer a { flex-wrap: nowrap; gap: 7px; border-radius: 12px; white-space: nowrap; transition: color .18s, background-color .18s, scale .32s cubic-bezier(.2,1.4,.3,1); }
+  .site-footer a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+  .site-footer a:active { scale: 1.03 .95; }
+  .site-footer a:first-child > span { display: none; }
+  .site-footer .repository-link { gap: 6px; padding-inline: 10px; background: color-mix(in srgb,var(--surface-soft) 65%,transparent); }
+  .site-footer .repository-link > span { display: inline; font-size: 11px; }
+  .report-preview-transition, .report-preview-page { min-width: 0; }
+  .report-preview-page { transform-origin: center 80px; overflow-anchor: none; }
+  .report-mode button { transition: background-color .25s, color .2s, box-shadow .25s, scale .42s cubic-bezier(.2,1.4,.3,1); transform-origin: center; }
+  .report-mode button:active { transform: none; scale: 1.025 .95; }
+  .report-mode button.active { box-shadow: var(--shadow-raised); }
+  .account-menu, .account-menu:popover-open { animation: none; transform-origin: top right; }
+  .account-menu { opacity: 0; transform: translateY(-8px) scale(1.025,.94); pointer-events: none; transition: opacity .18s ease, transform .26s cubic-bezier(.4,0,1,1), display .26s allow-discrete, overlay .26s allow-discrete; }
+  .account-menu:popover-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; transition: opacity .2s ease, transform .46s cubic-bezier(.2,1.35,.3,1), display .46s allow-discrete, overlay .46s allow-discrete; }
+  .account-menu > :is(header,section,button) { opacity: 0; transform: translateY(-4px); transition: opacity .1s ease, transform .15s ease; }
+  .account-menu:popover-open > :is(header,section,button) { opacity: 1; transform: none; transition: opacity .23s ease, transform .36s cubic-bezier(.2,.8,.2,1); transition-delay: .05s; }
+  .account-menu:popover-open > section { transition-delay: .09s; }
+  .account-menu:popover-open > button { transition-delay: .13s; }
+  @starting-style {
+    .account-menu:popover-open { opacity: 0; transform: translateY(-10px) scale(.9,.94); }
+    .account-menu:popover-open > :is(header,section,button) { opacity: 0; transform: translateY(-4px); }
+  }
+}
+@media screen and (max-width:800px) {
+  .site-footer { padding: 8px max(16px,env(safe-area-inset-right)) calc(112px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); gap: 14px; font-size: 11px; }
+  .workspace { padding-bottom: 16px; }
+  .notebook-pages { min-height: 0; }
+  .app-shell:has(.rapid-save-bar) .workspace { padding-bottom: calc(152px + env(safe-area-inset-bottom)); }
+}
+@media screen and (max-width:359px) { .site-footer { gap: 8px; font-size: 10px; } .site-footer .repository-link { padding-inline: 8px; } }
+@media (prefers-reduced-motion:reduce) {
+  .account-menu, .account-menu:popover-open, .account-menu > :is(header,section,button), .account-menu:popover-open > :is(header,section,button), .report-mode button, .site-footer a { transition: none; transform: none; scale: none; }
+}
+@media print { .print-report-host { display: contents; } }

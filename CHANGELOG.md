@@ -5,6 +5,11 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — mejoras continuas
 
 ### Interfaz operativa
+- Ambos formatos, semanales y mensuales, excluyen clientes archivados/eliminados de hojas, revisiones, pendientes y contadores; el historial almacenado no se borra y vuelve al reactivar el cliente.
+- PDF/PNG con nombres que distinguen formato simple/detallado y período semanal/mensual; el título de la app se restaura al cerrar el diálogo de impresión.
+- Formatos «Simple» y «Detallado», independientes del período, con descripción mensual correcta y transición squishy secuencial sin superponer hojas ni alterar la paginación física.
+- Footer compacto y centrado con copyright/portfolio y GitHub visibles en móvil; un único espacio para el dock. Las hojas ocultas de impresión/medición quedan aisladas del scroll para eliminar el tramo blanco final.
+- Menú de cuenta con entrada elástica escalonada y salida progresiva en la capa superior nativa; clic exterior/Escape, foco y movimiento reducido conservados.
 - Guardar con tratamiento sólido de alto contraste y «Guardar y siguiente» tonal con borde visible, en claro/oscuro; contraste de texto superior a 7:1 y cambios de tema sin interpolar colores de estos botones.
 - Apertura/cierre progresivos del registro rápido, contenido y barra fija, con deformación elástica suave; estado del cliente con check trazado, pulso squishy y etiqueta animada, sin repetir al recibir el eco del guardado.
 - Modal escalonado y cierre ligado al final real de la animación, conservando el diálogo/foco e inhabilitando controles durante la salida; cerrar durante la entrada parte del estado visual actual. Respeto de movimiento reducido.

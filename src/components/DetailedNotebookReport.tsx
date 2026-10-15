@@ -60,7 +60,8 @@ export default function DetailedNotebookReport({ store, week, month, title, prev
           section.append(article)
         }
         host.replaceChildren(section)
-        const height = section.getBoundingClientRect().height
+        // Preview squash transforms must never alter physical A4 pagination.
+        const height = parseFloat(getComputedStyle(section).height)
         cache.set(key, height)
         return height
       }
