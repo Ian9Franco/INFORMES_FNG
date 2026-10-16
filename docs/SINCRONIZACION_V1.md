@@ -30,10 +30,20 @@ Clientes y revisiones son independientes por plataforma: `archivedPlatforms` só
 - Histórico: sólo el rango de fechas solicitado, paginado en lotes de 500; períodos visitados se reutilizan en memoria.
 - Escritura: sólo registros modificados, agrupados tras 350 ms, máximo 150 por lote.
 - Realtime: un canal por usuario, desconectado cuando la página está oculta. Al regresar se recuperan metadata y período activo, sin polling por segundo.
-- Cola local por usuario; espera creciente hasta 60 s frente a errores. Los conflictos no se reintentan ciegamente.
+- Cola local por usuario; espera creciente hasta 60 s frente a fallas de conexión. Los conflictos reales y errores de validación no se reintentan ciegamente.
 - Caché offline limitada al período visible. Exportar respaldo es una lectura completa explícita; los PNG/PDF no se suben a Supabase.
 
 La metadata de tareas resueltas/cierres todavía se carga completa. Para volúmenes mayores se puede paginar/archivar esos históricos. No se implementó retención destructiva de sesiones ni revisiones.
+
+### Revisar cambios sin avisos repetidos
+
+Los conflictos se consultan desde **Mi cuenta → Revisar cambios (cantidad)**. No desplazan toda la libreta con un aviso por registro. Cada revisión identifica cliente, servicio y fecha; la decisión se aplica sólo a ese registro. **Descargar copia local** preserva los pendientes en JSON, pero no elige una versión ni borra automáticamente la cola.
+
+Dos dispositivos pueden crear una revisión del mismo cliente/fecha/servicio con UUID distintos. Al conservar la copia local se usa el ID y la versión actuales del registro canónico de la nube, con CAS; no se vuelve a insertar el UUID que colisionaba. Meta Ads, Google Ads y orgánico siguen separados. Las eliminaciones lógicas que forman parte de una sustitución atómica no se confunden con otra revisión.
+
+`P0001`, errores de constraints y permisos no prueban que haya una edición concurrente. Se muestran como cambios no aceptados por la DB, conservados localmente y detenidos hasta una edición, decisión o reintento explícito. Una respuesta tardía o un eco ya confirmado no vuelve a crear un conflicto que el usuario resolvió. La recuperación de colisiones consulta sólo los IDs y clientes/fechas involucrados, con paginación; no descarga todos los meses ni añade polling.
+
+Pruebas adicionales: `tests/sync.test.mjs` y `scripts/verify-sync-resolution.mjs` (móvil oscuro y escritorio claro, Auth/REST/Realtime simulados; no escribe en Supabase real).
 
 ## Companion
 

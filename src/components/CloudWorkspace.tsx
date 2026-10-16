@@ -15,6 +15,8 @@ import type { CustomAction } from '../review-actions'
 import { definitionService } from '../review-actions'
 import { reviewService } from '../work-services'
 import { scopedReviews } from '../platforms'
+import { reviewIdentity } from '../sync/conflicts'
+import SyncResolutionPanel from './SyncResolutionPanel'
 
 const columns = 'kind,id,payload,version,deleted,review_date,updated_at'
 
@@ -26,6 +28,7 @@ export default function CloudWorkspace({ user, onPassword, onSignOut }: { user: 
   const [refreshing, setRefreshing] = useState(false)
   const [ready, setReady] = useState(false)
   const [legacyImported, setLegacyImported] = useState(false)
+  const [reviewSync, setReviewSync] = useState(false)
   const legacyLocal = useRef(load())
   const engine = useRef<SyncEngine | null>(null)
   const range = useRef({ start: keyDate(new Date()).slice(0, 7) + '-01', end: keyDate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)) })
@@ -72,7 +75,20 @@ export default function CloudWorkspace({ user, onPassword, onSignOut }: { user: 
       const keys = new Set(changes.map(recordKey))
       const { data, error } = await client.from('fng_records').select(columns).eq('user_id', userId).in('id', [...new Set(changes.map(change => change.id))])
       if (error) throw new Error(error.message)
-      return (data as RecordRow[]).filter(row => keys.has(recordKey(row)))
+      const result = new Map((data as RecordRow[]).filter(row => keys.has(recordKey(row))).map(row => [recordKey(row), row]))
+      const reviews = changes.filter(change => reviewIdentity(change))
+      // Read only the involved clients/dates, and only on a rejected write.
+      // A review created offline can collide with a different UUID in the cloud.
+      if (reviews.length) {
+        const identities = new Set(reviews.map(reviewIdentity))
+        for (let offset = 0; ; offset += 500) {
+          const { data: matches, error: matchError } = await client.from('fng_records').select(columns).eq('user_id', userId).eq('kind','review').in('client_id',[...new Set(reviews.map(change => String(change.payload.clientId)))]).in('review_date',[...new Set(reviews.map(change => String(change.payload.date)))]).order('id').range(offset,offset+499)
+          if (matchError) throw new Error(matchError.message)
+          for (const row of matches as RecordRow[]) if (identities.has(reviewIdentity(row))) result.set(recordKey(row),row)
+          if (matches.length < 500) break
+        }
+      }
+      return [...result.values()]
     } }, localStorage, `fng-outbox:${userId}`, next => {
       if (!alive) return
       const { start, end } = range.current
@@ -125,7 +141,7 @@ export default function CloudWorkspace({ user, onPassword, onSignOut }: { user: 
         if (cached) {
           const records = [...storeRecords(JSON.parse(cached) as Store).values()].map(row => ({ ...row, version: 0, deleted: false }))
           // Cached data is read-only until actual versions have been recovered.
-          setView({ store: rowsStore(records), state: 'offline', conflicts: [], message: 'Sin conexión: mostrando la última copia de este usuario.' })
+          setView({ store: rowsStore(records), state: 'offline', conflicts: [], rejected: [], message: 'Sin conexión: mostrando la última copia de este usuario.' })
         }
         setFailure(error instanceof Error ? error.message : String(error))
       }
@@ -199,7 +215,7 @@ export default function CloudWorkspace({ user, onPassword, onSignOut }: { user: 
   return <>
 
     {!legacyImported && !localStorage.getItem(`fng-legacy-imported:${userId}`) && (legacyLocal.current.reviews.length > 0 || legacyLocal.current.pending.length > 0) ? <section className="sync-conflicts screen"><p>Este dispositivo tiene registros anteriores. Podés unirlos a tu cuenta sin reemplazar las revisiones existentes en la nube.</p><button onClick={() => void mergeLegacy()} disabled={!ready}>Unir registros de este dispositivo</button></section> : null}
-    {view.conflicts.length ? <section className="sync-conflicts screen" aria-label="Conflictos de sincronización">{view.conflicts.map(change => <div key={recordKey(change)}><p>Otro dispositivo cambió este registro: <strong>{String(change.payload.name ?? change.payload.date ?? change.payload.text ?? change.id)}</strong>. Tu versión permanece guardada.</p><button onClick={() => engine.current?.resolve(recordKey(change), false)}>Usar versión de la nube</button><button onClick={() => engine.current?.resolve(recordKey(change), true)}>Conservar mi versión</button></div>)}</section> : null}
-    <App onSync={syncNow} readOnly={!ready} headerTools={<WorkspaceControls email={user.email} state={online ? view.state : 'offline'} failure={failure} message={view.message} loading={loadingPeriod || refreshing} onRefresh={() => void refreshNow()} onPassword={onPassword} onSignOut={onSignOut} />} initialData={view.store} onChange={ready ? onChange : undefined} storageMode="cloud" userId={userId} onPeriodChange={changePeriod} onExport={exportAll} onImport={importAll} />
+    <SyncResolutionPanel open={reviewSync} onClose={() => setReviewSync(false)} view={view} onResolve={(key,keepLocal) => engine.current?.resolve(key,keepLocal)} />
+    <App onSync={syncNow} readOnly={!ready} headerTools={<WorkspaceControls email={user.email} state={online ? view.state : 'offline'} failure={failure} message={view.message} syncProblems={view.conflicts.length + view.rejected.length} onReviewSync={() => setReviewSync(true)} loading={loadingPeriod || refreshing} onRefresh={() => void refreshNow()} onPassword={onPassword} onSignOut={onSignOut} />} initialData={view.store} onChange={ready ? onChange : undefined} storageMode="cloud" userId={userId} onPeriodChange={changePeriod} onExport={exportAll} onImport={importAll} />
   </>
 }
