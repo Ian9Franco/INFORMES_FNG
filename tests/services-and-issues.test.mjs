@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { activePlatforms, platformActive, scopedReviews, togglePlatform } from '../src/platforms.ts'
-import { latestIssues, validReviewIssues, issueCellText } from '../src/review-issues.ts'
+import { latestIssues, validReviewIssues, issueCellText, reviewConditionTone, conditionMark } from '../src/review-issues.ts'
 import { simpleActionSummary, simpleActionLegend } from '../src/simple-report.ts'
 import { compactReviewText } from '../src/report-layout.ts'
 import { dailyRequired, weeklyServiceProgress } from '../src/service-cadence.ts'
@@ -77,15 +77,45 @@ test('simple report aggregates all actions with quantities, scopes, schedules, c
   const text=simpleActionSummary(entries).join('\n'),legend=simpleActionLegend(entries)
   assert.match(text,/MA · An\+ ×2 · Camp ×1/)
   assert.match(text,/G · KW ×3 · Pres ×1/)
-  assert.match(text,/MO · Feed ×2 \(Sáb\/Dom\)/)
+  assert.match(text,/MO · 2 publicaciones programadas para sábado, domingo \(registro 16\/10\/2026\)/)
   assert.match(legend,/An\+: Añadí anuncios/);assert.match(legend,/KW: Actualicé keywords/)
   assert.match(legend,/MA: Meta Ads · G: Google Ads · MO: Meta orgánico/)
-  assert.match(legend,/Feed: Programé publicación/)
+  assert.doesNotMatch(legend,/Feed:/,'Scheduled content is spelled out rather than abbreviated')
   assert.match(legend,/An\+2 = 2 anuncios añadidos/)
   assert.match(legend,/\(Sáb\/Dom\) = días programados/)
   assert.equal(legend.includes('H: Programé historia'),false,'Only action abbreviations used in this period belong in the compact dictionary')
   assert.equal(legend.match(/Pres:/g).length,1)
   assert.deepEqual(simpleActionSummary([review('meta_ads',{issues:[{type:'no_budget'}]})]),[],'An issue is not a positive action or a quantity')
+})
+
+test('client-requested campaign pause is neutral, persistent and independent of errors and archiving',()=>{
+  const issues=[{type:'client_paused',detail:'Hasta nuevo aviso'}]
+  const paused=review('meta_ads',{issues})
+  assert.equal(validReviewIssues(issues),true)
+  assert.equal(reviewConditionTone(paused),'paused')
+  assert.equal(conditionMark([paused]),'P')
+  assert.equal(conditionMark([paused,review('google_ads',{issues:[{type:'error'}]})]),'!','An actual error must remain visible alongside a neutral pause')
+  assert.match(compactReviewText(paused),/Meta Ads · Revisado · Campañas apagadas por decisión del cliente: Hasta nuevo aviso/)
+  assert.doesNotMatch(compactReviewText(paused),/incidencia|error/i)
+  assert.match(issueCellText([paused]),/decisión del cliente/)
+  assert.match(simpleActionLegend([paused]),/P: campañas apagadas por decisión del cliente/)
+  assert.deepEqual(simpleActionSummary([paused]),[],'A client pause is not work performed or a quantity')
+  const states=[{id:'status',clientId:'c',service:'meta_ads',date:'2026-09-30',reviewId:'old',issues}]
+  assert.deepEqual(latestIssues([],'c','meta_ads','2026-10-01',states),issues)
+  assert.deepEqual(latestIssues([],'c','google_ads','2026-10-01',states),[])
+  assert.deepEqual(latestIssues([review('meta_ads',{date:'2026-10-02',issues:[]})],'c','meta_ads','2026-10-03',states),[])
+  const report=activeReportStore({clients:[client],reviews:[paused],pending:[],closed:[]})
+  assert.equal(report.clients.length,1);assert.equal(report.reviews.length,1)
+})
+
+test('programming is readable, keeps every registration date and never claims publication occurred',()=>{
+  const reviews=[review('meta_organic',{date:'2026-10-09',actionEntries:[action('meta.story.scheduled',2,{scheduledDays:['sun','sat']})]}),review('meta_organic',{date:'2026-10-16',actionEntries:[action('meta.story.scheduled',1,{scheduledDays:['wed']})]})]
+  const summary=simpleActionSummary(reviews,true).join('\n')
+  assert.match(summary,/2 historias programadas para sábado, domingo \(registro 09\/10\/2026\)/)
+  assert.match(summary,/1 historia programada para miércoles \(registro 16\/10\/2026\)/)
+  assert.doesNotMatch(summary,/publicad[ao]s?/)
+  assert.match(simpleActionLegend(reviews),/Programado ≠ publicado/)
+  assert.match(compactReviewText(reviews[0]),/Programé historia: 2 \(para sábado, domingo\)/)
 })
 
 test('the header legend explains review states even with no structured actions',()=>{

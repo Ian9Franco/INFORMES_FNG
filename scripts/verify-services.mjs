@@ -26,9 +26,10 @@ const rows=new Map([
 ].map(r=>[`${r.kind}:${r.id}`,r]))
 const sockets=new Set(),writes=[],errors=[]
 const resume=process.argv[6]??''
-const reportsOnly=['reports','density','monthly'].includes(resume)
+const reportsOnly=['reports','density','monthly','pause'].includes(resume)
 if(resume)rows.set('review:confirmed-a',row('review','confirmed-a',{id:'confirmed-a',clientId:'a',platform:'meta_ads',service:'meta_ads',date:today,createdAt:`${today}T12:00:00Z`,actions:'',observations:'',actionSchemaVersion:1,actionEntries:[],issues:[{type:'no_budget',detail:'Esperando recarga'}]}))
 if(reportsOnly)for(const [id,clientId,service,entries] of [['confirmed-a','a','meta_ads',[action('meta.ad.created',2),action('meta.campaign.created')]],['post-b','b','meta_organic',[action('meta.post.scheduled',1,{scheduledDays:['sat','sun']})]],['google-b','b','google_ads',[action('google.keyword.updated',3)]]])rows.set(`review:${id}`,row('review',id,{id,clientId,platform:service==='google_ads'?'google_ads':'meta_ads',service,date:today,createdAt:`${today}T12:00:00Z`,actions:'',observations:'',actionSchemaVersion:1,actionEntries:entries,issues:clientId==='a'?[{type:'error',detail:'Pago rechazado'}]:[]}))
+if(resume==='pause')rows.get('review:confirmed-a').payload.issues=[{type:'client_paused',detail:'Hasta nuevo aviso'}]
 if(resume==='density')for(let i=0;i<37;i++) {
   const id=`fixture-${i}`;rows.set(`client:${id}`,row('client',id,{id,name:`CLIENTE ${String(i+1).padStart(2,'0')}`,active:true,services:i<27?['meta_ads']:['meta_ads','google_ads','meta_organic']}))
   const monday=new Date(`${today}T12:00:00`);monday.setDate(monday.getDate()-(monday.getDay()+6)%7)
@@ -87,6 +88,28 @@ async function save(page) {await page.locator('.rapid-save-bar .save-button').cl
 try {
   await mkdir(output,{recursive:true})
   const pc=await client(1440,'light'),phone=await client(390,'dark')
+  if(resume==='pause') {
+    const clientRow=reviewRow(pc.page,'a','meta_ads')
+    assert.equal(await clientRow.locator('.review-state.is-client-paused').count(),1)
+    assert.equal(await clientRow.locator('.has-issue').count(),0,'A client decision must not be styled as a warning')
+    assert.match(await clientRow.innerText(),/Campañas apagadas por decisión del cliente/)
+    await clientRow.locator('.quick-register').click()
+    const pause=pc.page.getByRole('button',{name:'Campañas apagadas',exact:true})
+    assert.equal(await pause.getAttribute('aria-pressed'),'true')
+    await pause.click();await save(pc.page)
+    await phone.page.waitForFunction(()=>!document.querySelector('.review-item[data-client-id="a"] .review-state.is-client-paused'))
+    await clientRow.locator('.quick-register').click();await pause.click();await save(pc.page)
+    await phone.page.waitForFunction(()=>document.querySelector('.review-item[data-client-id="a"] .review-state.is-client-paused'))
+    assert.equal(rows.get('client:a').payload.active,true)
+    assert.equal(rows.get('review:confirmed-a').payload.issues[0].type,'client_paused')
+    assert.equal(writes.filter(w=>w.kind==='condition').length,0)
+    await phone.page.screenshot({path:`${output}/client-pause-mobile-dark.png`,fullPage:true})
+    await navigate(pc.page,'Semana','semana')
+    const weekPause=pc.page.getByRole('region',{name:'Semana Meta Ads',exact:true}).getByRole('button',{name:/Revisión de ALAMO.*Campañas apagadas por decisión del cliente/})
+    assert.equal(await weekPause.innerText(),'P')
+    assert.ok((await weekPause.getAttribute('class')).includes('is-client-paused'))
+    assert.ok(!(await weekPause.getAttribute('class')).includes('has-issue'))
+  }
   if(!reportsOnly) {
   assert.equal(await reviewRow(pc.page,'b','meta_ads').count(),0)
   assert.equal(await reviewRow(pc.page,'b','google_ads').count(),1)
@@ -100,7 +123,7 @@ try {
   console.log('Realtime confirmation and previous-month issue carry passed')
   assert.equal(rows.get('client:a').payload.active,true,'No-budget must never archive a client')
   await reviewRow(pc.page,'a','meta_ads').locator('.quick-register').click()
-  const issues=pc.page.getByRole('region',{name:'Incidencias de la revisión',exact:true})
+  const issues=pc.page.getByRole('region',{name:'Estado e incidencias de la revisión',exact:true})
   await issues.getByRole('button',{name:'Sin presupuesto',exact:true}).click()
   await issues.getByRole('button',{name:'Con error',exact:true}).click()
   await issues.getByLabel('Qué error detectaste',{exact:true}).fill('Pago rechazado')
@@ -115,6 +138,7 @@ try {
   await reviewRow(pc.page,'b','meta_organic').locator('.quick-register').click()
   assert.equal(await pc.page.locator('.available-action-tags button[data-action-type-id="meta.ad.created"]').count(),0)
   assert.equal(await pc.page.getByRole('button',{name:'Sin presupuesto',exact:true}).count(),0,'Organic is not a paid budget workflow')
+  assert.equal(await pc.page.getByRole('button',{name:'Campañas apagadas',exact:true}).count(),0,'Campaign pauses do not apply to organic publishing')
   await pc.page.locator('.available-action-tags button[data-action-type-id="meta.post.scheduled"]').click()
   await pc.page.locator('.story-day-trigger').click()
   const menu=pc.page.getByRole('dialog',{name:'Días de la publicación programada',exact:true})
@@ -137,7 +161,7 @@ try {
   assert.equal(await legend.count(),1,'A single dictionary belongs above the summary table, not below it')
   assert.match(await legend.innerText(),/Guía rápida · MA: Meta Ads/)
   assert.match(await legend.innerText(),/An\+: Añadí anuncios/)
-  assert.match(await legend.innerText(),/Feed: Programé publicación/)
+  assert.match(await legend.innerText(),/Programado ≠ publicado/)
   assert.match(await legend.innerText(),/An\+2 = 2 anuncios añadidos/)
   assert.ok(await legend.evaluate(el=>Boolean(el.nextElementSibling?.matches('table'))),'Dictionary precedes the table inside the measured A4 content')
   if(resume==='monthly') {
@@ -150,7 +174,7 @@ try {
   } else {
   let simple=pc.page.locator('.report-preview-wrap .report-grid')
   await simple.waitFor();assert.match(await simple.innerText(),/An\+2/);assert.match(await simple.innerText(),/Camp1/)
-  assert.match(await simple.innerText(),/KW3/);assert.match(await simple.innerText(),/Feed1\(Sáb\/Dom\)/);assert.match(await simple.innerText(),/Con error/)
+  assert.match(await simple.innerText(),/KW3/);assert.match(await simple.innerText(),/1 publicación programada para sábado, domingo/);assert.match(await simple.innerText(),resume==='pause'?/Campañas apagadas por decisión del cliente/:/Con error/)
   await simple.screenshot({path:`${output}/services-simple-week.png`})
   await pc.page.pdf({path:`${output}/services-simple-week.pdf`,preferCSSPageSize:true,printBackground:true})
   assert.equal((await PDFDocument.load(await readFile(`${output}/services-simple-week.pdf`))).getPageCount(),1)
@@ -161,7 +185,7 @@ try {
   } else {
   await pc.page.locator('.report-mode').getByRole('button',{name:/^Detallado/}).click()
   const detail=pc.page.locator('.detail-preview-pages');await detail.waitFor()
-  assert.match(await detail.innerText(),/Pago rechazado/);assert.match(await detail.innerText(),/Meta orgánico/);assert.match(await detail.innerText(),/Añadí anuncios: 2/)
+  assert.match(await detail.innerText(),resume==='pause'?/Revisado · Campañas apagadas por decisión del cliente/:/Pago rechazado/);assert.match(await detail.innerText(),/Meta orgánico/);assert.match(await detail.innerText(),/Añadí anuncios: 2/)
   await pc.page.pdf({path:`${output}/services-detailed-week.pdf`,preferCSSPageSize:true,printBackground:true})
   await pc.page.locator('.report-mode').getByRole('button',{name:/^Simple/}).click()
   await pc.page.getByRole('button',{name:'Histórico mensual',exact:true}).click();await pc.page.waitForTimeout(700)
@@ -171,7 +195,7 @@ try {
   await navigate(pc.page,'Clientes','clientes')
   await pc.page.getByRole('region',{name:'Clientes Meta Ads',exact:true}).getByRole('button',{name:'Archivar HISTÓRICO',exact:true}).click()
   assert.equal(await pc.page.getByRole('region',{name:'Clientes Meta orgánico',exact:true}).getByText('HISTÓRICO',{exact:true}).count(),1)
-  await navigate(pc.page,'Informes','informes');assert.doesNotMatch(await simple.innerText(),/An\+7/);assert.match(await simple.innerText(),/H2/)
+  await navigate(pc.page,'Informes','informes');assert.doesNotMatch(await simple.innerText(),/An\+7/);assert.match(await simple.innerText(),/2 historias programadas para sábado, domingo/)
   assert.equal(writes.filter(w=>w.kind==='review'&&w.id==='old').length,0,'Legacy projections must not rewrite original history on reads')
   assert.equal(writes.filter(w=>w.kind==='condition').length,0)
   assert.deepEqual(errors,[])

@@ -37,10 +37,13 @@ Cada revisión permite marcar `issues` con IDs estables:
 
 - `no_budget`: **Sin presupuesto**, con detalle opcional.
 - `error`: **Con error**, con detalle opcional.
+- `client_paused`: **Campañas apagadas por decisión del cliente**, con detalle opcional. Es un estado informativo para Meta Ads o Google Ads, no un error ni una acción ejecutada por el operador. Se distingue con pausa neutra y `P` en la planilla; nunca con `!` salvo que coexista una incidencia real.
 
-Máximo dos tipos diferentes; detalle de hasta 600 caracteres cada uno. No tienen cantidades, no son acciones positivas, no archivan al cliente y no crean pendientes automáticamente. Se puede registrar una revisión sin cambios y mantener la incidencia. Para resolverla, desmarcarla y guardar la revisión: los informes de fechas anteriores conservan lo que se había detectado.
+Máximo tres tipos diferentes; detalle de hasta 600 caracteres cada uno. No tienen cantidades, no son acciones positivas, no archivan al cliente y no crean pendientes automáticamente. Se puede registrar una revisión sin cambios y mantener el estado. Para resolverlo, desmarcarlo y guardar la revisión: los informes de fechas anteriores conservan lo que se había registrado. Aplicar `client_requested_campaign_pause` antes de usar el nuevo estado contra la DB.
 
 La UI distingue revisión confirmada con alerta, revisión confirmada normal y ausencia de revisión. El simple semanal conserva las marcas por día y agrega una columna amplia de acciones acumuladas de la semana; el mensual acumula las del mes. Ambos muestran incidencias por servicio y todas las acciones estructuradas con cantidades abreviadas y leyenda. El detallado mantiene el texto completo por revisión y fecha. Las notas libres extensas siguen en el detallado; el simple indica que existen.
+
+Las historias y publicaciones programadas se escriben completas también en el simple: cantidad, días previstos y fecha de registro. Las programaciones de semanas distintas no se fusionan en el mensual. «Registro 16/10/2026» indica cuándo se anotó; no afirma la fecha exacta de publicación ni que el contenido se haya publicado. Los registros existentes conservan sus días seleccionados, sin inventar fechas ni enlaces a perfiles/calendarios no registrados.
 
 ## Persistencia eficiente
 

@@ -43,6 +43,17 @@ test('SQL: independent services, read-only bounded condition projection, issue v
     await write([{...client,expectedVersion:1,payload:{...client.payload,archivedServices:['meta_ads']}}])
     const account=(await db.query('select public.fng_companion_catalog() as c')).rows[0].c.accounts[0]
     assert.equal(account.active,true);assert.deepEqual(account.services,['meta_organic'],'Organic remains trackable with Ads archived')
+    const paused=review('paused','google_ads',{date:'2026-10-19',issues:[{type:'client_paused',detail:'Decisión del cliente'}]})
+    await write([paused])
+    let pauseState=(await db.query("select payload from public.fng_records where kind='condition' and payload->>'service'='google_ads'")).rows[0].payload
+    assert.deepEqual(pauseState.issues,paused.payload.issues,'A neutral pause is persisted in the existing bounded projection')
+    assert.equal((await db.query("select payload->>'active' as active from public.fng_records where kind='client' and id='c'")).rows[0].active,'true')
+    await assert.rejects(write([review('organic-pause','meta_organic',{date:'2026-10-19',issues:paused.payload.issues})]),/sólo corresponde/)
+    await write([review('all-conditions','google_ads',{date:'2026-10-20',issues:[{type:'no_budget'},{type:'error'},{type:'client_paused'}]})])
+    await write([review('pause-cleared','google_ads',{date:'2026-10-21',issues:[]})])
+    pauseState=(await db.query("select payload from public.fng_records where kind='condition' and payload->>'service'='google_ads'")).rows[0].payload
+    assert.deepEqual(pauseState.issues,[])
+    assert.deepEqual((await db.query("select payload->'issues' as issues from public.fng_records where kind='review' and id='paused'")).rows[0].issues,paused.payload.issues,'Resuming does not rewrite previous reports')
     await db.exec(`select set_config('request.jwt.claim.sub','${other}',false)`)
     assert.equal((await db.query("select * from public.fng_records where kind='condition'")).rows.length,0)
   }finally{await db.close()}

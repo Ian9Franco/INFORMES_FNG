@@ -1,6 +1,6 @@
 import type { Review } from './data'
 import { entryDefinition, entryService, isScheduledAction, STORY_DAYS, validReviewActions } from './review-actions.ts'
-import { reviewIssueText } from './review-issues.ts'
+import { reviewIssueText, reviewConditionTone } from './review-issues.ts'
 import { WORK_SERVICES, reviewService, serviceLabel } from './work-services.ts'
 
 export type DetailItem = { id: string; date?: string; text: string; continued?: boolean }
@@ -18,7 +18,7 @@ export function compactReviewText(review: Review): string {
     return actions.length ? `${serviceLabel(platform)} · ${actions.join('; ')}` : ''
   }).filter(Boolean)
   const issue = reviewIssueText(review)
-  if (issue) lines.unshift(`${serviceLabel(reviewService(review))} · Revisado con incidencia: ${issue}`)
+  if (issue) lines.unshift(`${serviceLabel(reviewService(review))} · ${reviewConditionTone(review) === 'paused' ? 'Revisado ·' : 'Revisado con incidencia:'} ${issue}`)
   if (review.actions.trim()) lines.push(review.actions.trim())
   if (review.observations.trim()) lines.push(`Observaciones · ${review.observations.trim()}`)
   return lines.join('\n') || `${review.service || review.platform ? `${serviceLabel(reviewService(review))} · ` : ''}Revisado sin cambios`

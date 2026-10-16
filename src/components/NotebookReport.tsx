@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { date, format, type Store, weekDays } from '../data'
 import { sortClients } from '../clients'
 import { monthBounds } from '../sync/records'
-import { issueCellText } from '../review-issues'
+import { issueCellText, conditionMark } from '../review-issues'
 import { simpleActionSummary, simpleActionLegend } from '../simple-report'
 
 import DetailedNotebookReport from './DetailedNotebookReport'
@@ -66,14 +66,16 @@ function GridReport({ store, week, month, mode, title, preview = false }: { stor
       {month ? <table><thead><tr><th>CLIENTE</th><th title="Revisiones">REV.</th><th>ACCIONES</th><th>ÚLTIMA REVISIÓN</th></tr></thead><tbody>{clients.filter(client => client.active || entries.some(review => review.clientId === client.id)).map(client => {
         const reviews = entries.filter(review => review.clientId === client.id).sort((a,b) => a.date.localeCompare(b.date))
         const summary = simpleActionSummary(reviews,true)
-        return <tr key={client.id}><td>{client.name}</td><td>{reviews.length}</td><td className="simple-period-actions">{summary.join(' / ') || '—'}{issueCellText(reviews) ? <small className="report-issue">! {issueCellText(reviews)}</small> : null}{reviews.some(review => review.actions.trim()) ? <small className="simple-action-line">Notas en el detallado</small> : null}</td><td>{reviews.length ? format(reviews[reviews.length - 1].date) : '—'}</td></tr>
+        const mark = conditionMark(reviews)
+        return <tr key={client.id}><td>{client.name}</td><td>{reviews.length}</td><td className="simple-period-actions">{summary.join(' / ') || '—'}{issueCellText(reviews) ? <small className={`report-issue ${mark === 'P' ? 'is-client-paused' : ''}`}>{mark} {issueCellText(reviews)}</small> : null}{reviews.some(review => review.actions.trim()) ? <small className="simple-action-line">Notas en el detallado</small> : null}</td><td>{reviews.length ? format(reviews[reviews.length - 1].date) : '—'}</td></tr>
       })}</tbody></table> : <table><thead><tr><th>CLIENTE</th>{days.map((day, index) => <th key={day}>{weekdays[index]}<small>{day.slice(8)}</small></th>)}<th>ACCIONES DE LA SEMANA</th></tr></thead><tbody>{active.map(client => {
         const clientReviews = entries.filter(review => review.clientId === client.id)
         const summary = simpleActionSummary(clientReviews,true)
+        const mark = conditionMark(clientReviews)
         return <tr key={client.id}><td>{client.name}</td>{days.map(day => {
           const reviews = clientReviews.filter(review => review.date === day)
-          return <td key={day}>{issueCellText(reviews) ? '!' : reviews.length ? '✓' : '·'}</td>
-        })}<td className="simple-period-actions">{summary.join(' / ') || '—'}{issueCellText(clientReviews) ? <small className="report-issue">! {issueCellText(clientReviews)}</small> : null}{clientReviews.some(review => review.actions.trim()) ? <small className="simple-action-line">Notas en el detallado</small> : null}</td></tr>
+          return <td key={day}>{conditionMark(reviews) || (reviews.length ? '✓' : '·')}</td>
+        })}<td className="simple-period-actions">{summary.join(' / ') || '—'}{issueCellText(clientReviews) ? <small className={`report-issue ${mark === 'P' ? 'is-client-paused' : ''}`}>{mark} {issueCellText(clientReviews)}</small> : null}{clientReviews.some(review => review.actions.trim()) ? <small className="simple-action-line">Notas en el detallado</small> : null}</td></tr>
       })}</tbody></table>}
     </div></div>
     <footer><span>{title} · seguimiento publicitario</span><span>{new Date().toLocaleDateString('es-AR')} · 1 / 1</span></footer>
