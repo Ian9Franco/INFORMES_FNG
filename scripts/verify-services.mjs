@@ -133,6 +133,13 @@ try {
   await reviewRow(phone.page,'a','meta_ads').locator('.quick-register').click()
   }
   await navigate(pc.page,'Informes','informes')
+  const legend=pc.page.locator('.report-preview-wrap .simple-action-legend')
+  assert.equal(await legend.count(),1,'A single dictionary belongs above the summary table, not below it')
+  assert.match(await legend.innerText(),/Guía rápida · MA: Meta Ads/)
+  assert.match(await legend.innerText(),/An\+: Añadí anuncios/)
+  assert.match(await legend.innerText(),/Feed: Programé publicación/)
+  assert.match(await legend.innerText(),/An\+2 = 2 anuncios añadidos/)
+  assert.ok(await legend.evaluate(el=>Boolean(el.nextElementSibling?.matches('table'))),'Dictionary precedes the table inside the measured A4 content')
   if(resume==='monthly') {
     await pc.page.getByRole('button',{name:'Histórico mensual',exact:true}).click()
     const simple=pc.page.locator('.report-preview-wrap .report-grid');await simple.waitFor()

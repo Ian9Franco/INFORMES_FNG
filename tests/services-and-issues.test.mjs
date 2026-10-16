@@ -79,7 +79,23 @@ test('simple report aggregates all actions with quantities, scopes, schedules, c
   assert.match(text,/G · KW ×3 · Pres ×1/)
   assert.match(text,/MO · Feed ×2 \(Sáb\/Dom\)/)
   assert.match(legend,/An\+: Añadí anuncios/);assert.match(legend,/KW: Actualicé keywords/)
+  assert.match(legend,/MA: Meta Ads · G: Google Ads · MO: Meta orgánico/)
+  assert.match(legend,/Feed: Programé publicación/)
+  assert.match(legend,/An\+2 = 2 anuncios añadidos/)
+  assert.match(legend,/\(Sáb\/Dom\) = días programados/)
+  assert.equal(legend.includes('H: Programé historia'),false,'Only action abbreviations used in this period belong in the compact dictionary')
+  assert.equal(legend.match(/Pres:/g).length,1)
   assert.deepEqual(simpleActionSummary([review('meta_ads',{issues:[{type:'no_budget'}]})]),[],'An issue is not a positive action or a quantity')
+})
+
+test('the header legend explains review states even with no structured actions',()=>{
+  for(const reviews of [[],[review('meta_ads',{issues:[{type:'no_budget'}]})]]) {
+    const legend=simpleActionLegend(reviews)
+    assert.match(legend,/✓: revisado/)
+    assert.match(legend,/!: con incidencia/)
+    assert.match(legend,/\?: por confirmar/)
+    assert.doesNotMatch(legend,/KW:|Feed:|An\+:/)
+  }
 })
 
 test('current condition metadata survives cache but is never uploaded, deleted or echoed by the client',()=>{

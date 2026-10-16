@@ -27,7 +27,8 @@
 /* Print/export uses explicit ink, never a color-only warning. */
 .notebook-report .report-issue { display: block; color: #714410; font-size: 7pt; line-height: 1.25; margin-top: 1mm; font-weight: 600; overflow-wrap: anywhere; }
 .notebook-report .simple-action-line { display: block; color: #263b31; font-size: 7pt; line-height: 1.25; margin-top: .7mm; overflow-wrap: anywhere; }
-.notebook-report .simple-action-legend { color: #3e4b40; font-size: 7pt; line-height: 1.4; margin: 2mm 0 0; text-align: left; }
+.notebook-report .simple-action-legend { color: #3e4b40; font-size: 7pt; line-height: 1.35; margin: 0 0 .7mm; padding-bottom: .7mm; border-bottom: 1px solid #dedfd6; text-align: left; }
+.notebook-report .simple-action-legend strong { color: #263b31; }
 .report-grid.is-weekly td:first-child, .report-grid.is-weekly th:first-child { width: 22%; }
 .report-grid.is-weekly td:last-child, .report-grid.is-weekly th:last-child { width: 48%; }
 .report-grid.is-weekly th:not(:first-child):not(:last-child) { font-size: 7.5pt; padding-inline: .2mm; }

@@ -31,5 +31,9 @@ export function simpleActionLegend(reviews: Review[]): string {
     const code=codes[entry.typeId]
     if(code) labels.set(code,entryDefinition(entry)!.label)
   }
-  return labels.size ? `MA: Meta Ads · G: Google Ads · MO: Meta orgánico. ${[...labels].map(([code,label]) => `${code}: ${label}`).join(' · ')}. El número indica cantidad (KW3 = 3 keywords). ?: por confirmar. !: revisado con incidencia.` : ''
+  return [
+    'MA: Meta Ads · G: Google Ads · MO: Meta orgánico.',
+    labels.size ? [...labels].map(([code,label]) => `${code}: ${label}`).join(' · ') : '',
+    'Número = cantidad (An+2 = 2 anuncios añadidos). (Sáb/Dom) = días programados. ✓: revisado / !: con incidencia / ?: por confirmar / ·: sin revisar.',
+  ].filter(Boolean).join('\n')
 }

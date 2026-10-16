@@ -29,6 +29,7 @@ function GridReport({ store, week, month, mode, title, preview = false }: { stor
   const active = clients.filter(client => client.active)
   const bounds = month ? monthBounds(month) : undefined
   const entries = store.reviews.filter(review => bounds ? review.date >= bounds.start && review.date < bounds.end : days.includes(review.date))
+  const legend = simpleActionLegend(entries)
   const pending = store.pending.filter(item => !item.resolved)
   const weekLabel = month ? new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(date(`${month}-01`)) : `${format(days[0])} al ${format(days[5])} de ${date(days[5]).getFullYear()}`
 
@@ -61,6 +62,7 @@ function GridReport({ store, week, month, mode, title, preview = false }: { stor
   const paper = <div ref={sheet} data-export-page="1" className={`notebook-report ${mode === 'detalle' ? 'report-detail' : 'report-grid'} ${month ? 'is-monthly' : 'is-weekly'}`}>
     <header><div><span className="report-overline">LIBRETA DE SEGUIMIENTO</span><h1>{title}</h1><p>Publicidad · registro {month ? 'mensual' : 'semanal'}</p></div><div><small>{month ? 'MES' : 'SEMANA'}</small><strong>{weekLabel}</strong></div></header>
     <div className="report-body" ref={area}><div className="report-content" ref={content}>
+      <p className="simple-action-legend" aria-label="Guía de abreviaturas"><strong>Guía rápida · </strong>{legend}</p>
       {month ? <table><thead><tr><th>CLIENTE</th><th title="Revisiones">REV.</th><th>ACCIONES</th><th>ÚLTIMA REVISIÓN</th></tr></thead><tbody>{clients.filter(client => client.active || entries.some(review => review.clientId === client.id)).map(client => {
         const reviews = entries.filter(review => review.clientId === client.id).sort((a,b) => a.date.localeCompare(b.date))
         const summary = simpleActionSummary(reviews,true)
@@ -73,7 +75,6 @@ function GridReport({ store, week, month, mode, title, preview = false }: { stor
           return <td key={day}>{issueCellText(reviews) ? '!' : reviews.length ? '✓' : '·'}</td>
         })}<td className="simple-period-actions">{summary.join(' / ') || '—'}{issueCellText(clientReviews) ? <small className="report-issue">! {issueCellText(clientReviews)}</small> : null}{clientReviews.some(review => review.actions.trim()) ? <small className="simple-action-line">Notas en el detallado</small> : null}</td></tr>
       })}</tbody></table>}
-      {simpleActionLegend(entries) ? <p className="simple-action-legend">{simpleActionLegend(entries)}</p> : null}
     </div></div>
     <footer><span>{title} · seguimiento publicitario</span><span>{new Date().toLocaleDateString('es-AR')} · 1 / 1</span></footer>
   </div>
