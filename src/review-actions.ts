@@ -1,4 +1,5 @@
 /** Immutable integration keys. Labels may change; IDs must never be renamed/reused. */
+import { serviceLabel, serviceProvider, type WorkService } from './work-services.ts'
 export const ACTION_SCHEMA_VERSION = 1 as const
 export type AdPlatform = 'meta_ads' | 'google_ads'
 export const STORY_DAYS = [
@@ -33,11 +34,11 @@ export const ACTION_TYPES = [
   { id: 'google.bidding.updated', platform: 'google_ads', label: 'Actualicé pujas', unit: 'ajustes' },
 ] as const
 export type ActionTypeId = typeof ACTION_TYPES[number]['id'] | `custom.${string}`
-export type CustomAction = { id: `custom.${string}`; label: string; platform: AdPlatform; scope: 'general' | 'client'; clientId?: string }
+export type CustomAction = { id: `custom.${string}`; label: string; platform: AdPlatform; service?: WorkService; scope: 'general' | 'client'; clientId?: string }
 export function validCustomAction(value: unknown): value is CustomAction {
   if (!value || typeof value !== 'object') return false
   const item = value as CustomAction
-  return typeof item.id === 'string' && /^custom\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(item.id) && typeof item.label === 'string' && item.label === item.label.trim() && item.label.length >= 2 && item.label.length <= 80 && ['meta_ads', 'google_ads'].includes(item.platform) && (item.scope === 'general' ? item.clientId === undefined : item.scope === 'client' && typeof item.clientId === 'string' && Boolean(item.clientId))
+  return typeof item.id === 'string' && /^custom\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(item.id) && typeof item.label === 'string' && item.label === item.label.trim() && item.label.length >= 2 && item.label.length <= 80 && ['meta_ads', 'google_ads'].includes(item.platform) && (item.service === undefined || ['meta_ads','google_ads','meta_organic'].includes(item.service) && serviceProvider(item.service) === item.platform) && (item.scope === 'general' ? item.clientId === undefined : item.scope === 'client' && typeof item.clientId === 'string' && Boolean(item.clientId))
 }
 export const isScheduledAction = (id: string) => id === 'meta.story.scheduled' || id === 'meta.post.scheduled'
 export const availableCustomActions = (catalog: CustomAction[], clientId?: string) => catalog.filter(item => validCustomAction(item) && (item.scope === 'general' || item.clientId === clientId))
@@ -55,6 +56,8 @@ export type ReviewAction = {
 
 export function actionDefinition(id: string) { return ACTION_TYPES.find(item => item.id === id) }
 export function entryDefinition(entry: ReviewAction) { return actionDefinition(entry.typeId) ?? entry.customDefinition }
+export const definitionService = (definition: { id: string; platform: AdPlatform; service?: WorkService }): WorkService => definition.service ?? (isScheduledAction(definition.id) ? 'meta_organic' : definition.platform)
+export const entryService = (entry: ReviewAction): WorkService | undefined => { const definition = entryDefinition(entry); return definition ? definitionService(definition) : undefined }
 
 export function validReviewActions(value: unknown): value is ReviewAction[] {
   if (!Array.isArray(value) || value.length > 40) return false
@@ -77,7 +80,7 @@ export function describeReviewActions(review: { actions: string; actionEntries?:
   const lines = entries.map(item => {
     const definition = entryDefinition(item)!
     const scheduled = isScheduledAction(item.typeId) ? ` · para ${STORY_DAYS.filter(day => item.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')}` : ''
-    return `${definition.platform === 'meta_ads' ? 'Meta' : 'Google'} · ${definition.label}: ${item.quantity}${scheduled}${item.evidence === 'observed' ? ' (por confirmar)' : ''}`
+    return `${serviceLabel(definitionService(definition))} · ${definition.label}: ${item.quantity}${scheduled}${item.evidence === 'observed' ? ' (por confirmar)' : ''}`
   })
   return [...lines, review.actions].filter(Boolean).join('\n')
 }

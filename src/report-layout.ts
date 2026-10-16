@@ -1,5 +1,7 @@
 import type { Review } from './data'
-import { entryDefinition, isScheduledAction, STORY_DAYS, validReviewActions } from './review-actions.ts'
+import { entryDefinition, entryService, isScheduledAction, STORY_DAYS, validReviewActions } from './review-actions.ts'
+import { reviewIssueText } from './review-issues.ts'
+import { WORK_SERVICES, reviewService, serviceLabel } from './work-services.ts'
 
 export type DetailItem = { id: string; date?: string; text: string; continued?: boolean }
 export type DetailBlock = { id: string; title: string; items: DetailItem[]; continued?: boolean }
@@ -8,16 +10,18 @@ export type DetailPage = { columns: [DetailBlock[], DetailBlock[]] }
 /** Keep all recorded information; only remove empty labels and repeated platform prefixes. */
 export function compactReviewText(review: Review): string {
   const entries = validReviewActions(review.actionEntries) ? review.actionEntries : []
-  const lines = (['meta_ads', 'google_ads'] as const).map(platform => {
-    const actions = entries.filter(entry => entryDefinition(entry)?.platform === platform).map(entry => {
+  const lines = WORK_SERVICES.map(platform => {
+    const actions = entries.filter(entry => entryService(entry) === platform).map(entry => {
       const days = isScheduledAction(entry.typeId) ? ` (para ${STORY_DAYS.filter(day => entry.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')})` : ''
       return `${entryDefinition(entry)!.label}: ${entry.quantity}${days}${entry.evidence === 'observed' ? ' (por confirmar)' : ''}`
     })
-    return actions.length ? `${platform === 'meta_ads' ? 'Meta' : 'Google'} · ${actions.join('; ')}` : ''
+    return actions.length ? `${serviceLabel(platform)} · ${actions.join('; ')}` : ''
   }).filter(Boolean)
+  const issue = reviewIssueText(review)
+  if (issue) lines.unshift(`${serviceLabel(reviewService(review))} · Revisado con incidencia: ${issue}`)
   if (review.actions.trim()) lines.push(review.actions.trim())
   if (review.observations.trim()) lines.push(`Observaciones · ${review.observations.trim()}`)
-  return lines.join('\n') || `${review.platform ? `${review.platform === 'meta_ads' ? 'Meta' : 'Google'} · ` : ''}Revisado sin cambios`
+  return lines.join('\n') || `${review.service || review.platform ? `${serviceLabel(reviewService(review))} · ` : ''}Revisado sin cambios`
 }
 
 /** Measured physical pagination: never scale type or drop overflow. */

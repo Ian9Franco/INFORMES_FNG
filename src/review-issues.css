@@ -1,0 +1,40 @@
+:root { --issue-ink: #805014; --issue-bg: #f4e5c9; }
+:root[data-theme='dark'] { --issue-ink: #f3d39c; --issue-bg: #4b3d26; }
+@media screen {
+  .review-issues { margin: 8px 0 16px; padding: 12px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow-pressed); }
+  .issue-heading { display: grid; gap: 5px; margin-bottom: 10px; }
+  .issue-heading strong { font-size: 13px; color: var(--ink); }
+  .issue-heading small, .review-issues > p { color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .issue-options { display: flex; gap: 8px; flex-wrap: wrap; }
+  .issue-options button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 8px 12px; border: 0; border-radius: 13px; background: var(--surface-soft); color: var(--ink); box-shadow: var(--shadow-raised); transition: background-color .25s,color .25s,scale .28s cubic-bezier(.34,1.56,.64,1); }
+  .issue-options button[aria-pressed='true'] { color: var(--issue-ink); background: var(--issue-bg); box-shadow: var(--shadow-pressed); }
+  .issue-options button:active { scale: 1.025 .95; }
+  .issue-options button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .issue-detail { display: grid; gap: 6px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .issue-detail input { min-width: 0; background: var(--surface-soft); color: var(--ink); box-shadow: var(--shadow-pressed); }
+  .review-issues > p { margin-bottom: 0; }
+  .review-state.has-issue, .state-pill.has-issue, .week-table td button.has-issue { color: var(--issue-ink); background: var(--issue-bg); }
+  .review-name small.issue-text { color: var(--issue-ink); }
+  .review-item.has-issue .one-touch-review.is-confirmed { color: var(--issue-ink); background: var(--issue-bg); }
+  .platform-section-heading > div { min-width: 0; }
+  .platform-section-heading .service-cadence { color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.5; margin: 5px 0 0; max-width: 55ch; }
+  .platform-section-heading > span { flex: none; }
+  .review-name .service-progress { color: var(--muted); font-size: 10px; margin-top: 3px; }
+  .review-platform-picker { flex-wrap: wrap; }
+  .review-platform-picker button { flex: 1; white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { .issue-options button { transition: none; scale: 1; } }
+}
+/* Print/export uses explicit ink, never a color-only warning. */
+.notebook-report .report-issue { display: block; color: #714410; font-size: 7pt; line-height: 1.25; margin-top: 1mm; font-weight: 600; overflow-wrap: anywhere; }
+.notebook-report .simple-action-line { display: block; color: #263b31; font-size: 7pt; line-height: 1.25; margin-top: .7mm; overflow-wrap: anywhere; }
+.notebook-report .simple-action-legend { color: #3e4b40; font-size: 7pt; line-height: 1.4; margin: 2mm 0 0; text-align: left; }
+.report-grid.is-weekly td:first-child, .report-grid.is-weekly th:first-child { width: 22%; }
+.report-grid.is-weekly td:last-child, .report-grid.is-weekly th:last-child { width: 48%; }
+.report-grid.is-weekly th:not(:first-child):not(:last-child) { font-size: 7.5pt; padding-inline: .2mm; }
+.report-grid.is-monthly td:first-child, .report-grid.is-monthly th:first-child { width: 23%; }
+.report-grid.is-monthly td:nth-child(2), .report-grid.is-monthly th:nth-child(2) { width: 10%; }
+.report-grid.is-monthly td:nth-child(3), .report-grid.is-monthly th:nth-child(3) { width: 52%; }
+.report-grid.is-monthly td:last-child, .report-grid.is-monthly th:last-child { width: 15%; }
+.notebook-report.report-grid td { padding-block: .6mm; }
+.notebook-report.report-grid .simple-period-actions { text-align: left; color: #263b31; font-size: 8.5pt; font-weight: 400; line-height: 1.2; }
+.notebook-report.report-grid .simple-period-actions .report-issue, .notebook-report.report-grid .simple-period-actions .simple-action-line { display: inline; margin-left: 1mm; font-size: 8pt; }

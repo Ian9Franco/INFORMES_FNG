@@ -13,7 +13,7 @@ test('export title removes forbidden filename characters without losing Spanish 
 })
 
 test('reports omit archived and deleted clients including their historical reviews and tasks without mutating storage', () => {
-  const store = { clients:[{id:'a',name:'Activo',active:true},{id:'b',name:'Archivado',active:false}],reviews:[{id:'r1',clientId:'a'},{id:'r2',clientId:'b'},{id:'r3',clientId:'deleted'}],pending:[{id:'p1',clientId:'a'},{id:'p2',clientId:'b'},{id:'p3',clientId:'deleted'}],closed:[] }
+  const store = { clients:[{id:'a',name:'Activo',active:true},{id:'b',name:'Archivado',active:false}],reviews:[{id:'r1',clientId:'a'},{id:'r2',clientId:'b'},{id:'r3',clientId:'deleted'}],pending:[{id:'p1',clientId:'a'},{id:'p2',clientId:'b'},{id:'p3',clientId:'deleted'}].map(task=>({...task,text:'Revisar presupuesto',resolved:false})),closed:[] }
   const original = structuredClone(store)
   const report = activeReportStore(store)
   assert.deepEqual(report.clients.map(c=>c.id),['a'])

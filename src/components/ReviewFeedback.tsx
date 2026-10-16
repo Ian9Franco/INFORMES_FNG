@@ -14,7 +14,7 @@ export function NavigationIndicator() {
 }
 
 /** Animate changes, not the initial load of every client in the list. */
-export function ReviewState({ reviewed }: { reviewed: boolean }) {
+export function ReviewState({ reviewed, issue = false }: { reviewed: boolean; issue?: boolean }) {
   const calm = useReducedMotion()
   const controls = useAnimationControls()
   const previous = useRef(reviewed)
@@ -25,14 +25,14 @@ export function ReviewState({ reviewed }: { reviewed: boolean }) {
     if (calm) { controls.set({ scaleX: 1, scaleY: 1 }); return }
     void controls.start({ scaleX: [1, 1.18, .95, 1.035, 1], scaleY: [1, .86, 1.12, .975, 1], transition: { duration: .58, times: [0, .25, .5, .75, 1], ease: 'easeInOut' } })
   }, [reviewed, calm, controls])
-  return <motion.span className={`review-state ${reviewed ? 'done' : ''}`} data-confirmed={reviewed} aria-hidden="true" initial={false} animate={controls}>
-    <AnimatePresence initial={false} mode="wait"><motion.span className="review-state-symbol" key={reviewed ? 'done' : 'pending'} initial={calm ? false : { opacity: 0, scale: .6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: calm ? 1 : .65 }} transition={{ duration: calm ? 0 : .16 }}>{reviewed ? <AnimatedCheck /> : <span className="review-state-dot" />}</motion.span></AnimatePresence>
+  return <motion.span className={`review-state ${reviewed ? 'done' : ''} ${issue ? 'has-issue' : ''}`} data-confirmed={reviewed} aria-hidden="true" initial={false} animate={controls}>
+    <AnimatePresence initial={false} mode="wait"><motion.span className="review-state-symbol" key={issue ? 'issue' : reviewed ? 'done' : 'pending'} initial={calm ? false : { opacity: 0, scale: .6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: calm ? 1 : .65 }} transition={{ duration: calm ? 0 : .16 }}>{issue ? <b>!</b> : reviewed ? <AnimatedCheck /> : <span className="review-state-dot" />}</motion.span></AnimatePresence>
   </motion.span>
 }
 
-export function ReviewStateLabel({ label, reviewed }: { label: string; reviewed: boolean }) {
+export function ReviewStateLabel({ label, reviewed, issue = false }: { label: string; reviewed: boolean; issue?: boolean }) {
   const calm = useReducedMotion()
-  return <span className={`state-pill review-state-label ${reviewed ? 'done' : ''}`}><AnimatePresence mode="wait" initial={false}><motion.span key={label} initial={calm ? false : { opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: calm ? 0 : -3 }} transition={{ duration: calm ? 0 : .14 }}>{label}</motion.span></AnimatePresence></span>
+  return <span className={`state-pill review-state-label ${reviewed ? 'done' : ''} ${issue ? 'has-issue' : ''}`}><AnimatePresence mode="wait" initial={false}><motion.span key={label} initial={calm ? false : { opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: calm ? 0 : -3 }} transition={{ duration: calm ? 0 : .14 }}>{label}</motion.span></AnimatePresence></span>
 }
 
 export function RapidSaveBar({ barRef, onKeyDown, children }: { barRef: React.Ref<HTMLDivElement>; onKeyDown: (event: React.KeyboardEvent) => void; children: React.ReactNode }) {

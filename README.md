@@ -2,6 +2,8 @@
 
 Aplicación de seguimiento **personal** de trabajo en Meta Ads y Google Ads para Fanger Design. Permite registrar revisiones por cliente y día, describir cambios u observaciones, gestionar pendientes y emitir informes semanales o mensuales.
 
+Los trabajos se separan en **Meta Ads, Google Ads y Meta orgánico (historias/feed)**, con incidencias «Sin presupuesto / Con error» que no archivan al cliente. El informe simple resume también anuncios, campañas, keywords y demás acciones con cantidades y leyenda. Ver [servicios, frecuencia e incidencias](docs/SERVICIOS_E_INCIDENCIAS.md) para la configuración privada del catálogo y la persistencia eficiente.
+
 **Estado:** MVP en desarrollo sobre `main`. El PR fundacional [#1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1) ya fue integrado. La interfaz operativa está disponible, pero **todavía no se considera lista para producción** hasta completar las validaciones de datos, Auth/RLS e impresión. Consultar [estado actual](docs/ESTADO_ACTUAL.md) y [limitaciones](#limitaciones-y-riesgos).
 
 ## Índice de documentación
@@ -100,13 +102,15 @@ La importación desde JSON requiere confirmación y restaura registros operativo
 
 ## Recorrido funcional
 
-1. **Mi jornada:** muestra progreso, clientes activos revisados/no revisados hoy y pendientes abiertos.
-2. **Semana:** matrices separadas Meta Ads / Google Ads, de lunes a sábado. Cada cliente tiene **una revisión por fecha y plataforma**, con acciones, observaciones y borradores independientes.
-3. **Clientes:** búsqueda y filtros, archivo/reactivación por plataforma y exportación/importación JSON. Altas, bajas y cambios de cuentas sólo desde Supabase, siguiendo [la guía](docs/ADMINISTRAR_CLIENTES.md).
+1. **Mi jornada:** progreso diario de Meta Ads de lunes a viernes, revisiones de los tres servicios y pendientes abiertos. Google muestra días revisados en la semana (referencia 2–3); orgánico distingue revisión opcional de programación de finde registrada. No exige revisar ambos todos los días.
+2. **Semana:** matrices separadas Meta Ads / Google Ads / Meta orgánico, de lunes a sábado. Cada cliente tiene **una revisión por fecha y servicio**, con acciones, incidencias, observaciones y borradores independientes.
+3. **Clientes:** búsqueda y filtros, archivo/reactivación por servicio y exportación/importación JSON. Altas, bajas, servicios contratados y cambios de cuentas sólo desde Supabase, siguiendo [la guía](docs/ADMINISTRAR_CLIENTES.md).
 4. **Informes:** período semanal o histórico mensual; formatos **Simple** y **Detallado**, vista previa A4, PNG e impresión/guardado PDF. Los informes excluyen clientes archivados y eliminados.
 5. **Lunes:** se visualiza automáticamente la semana corriente limpia, independientemente de las anteriores. El cierre de la semana pasada es **manual**; no se genera ni se envía automáticamente el informe. Los pendientes sobreviven al cambio.
 
 El informe detallado incluye pendientes abiertos **al momento de imprimir**, no un snapshot histórico del día del cierre. Los registros de semanas cerradas pueden reabrirse manualmente.
+
+«Próximas acciones / Mis pendientes» muestra únicamente tareas explícitas guardadas desde «Nuevo pendiente» en una revisión, de cualquier fecha. Identifica cliente y plataforma; los registros antiguos sin plataforma aparecen una sola vez como «General». No interpreta observaciones, acciones ya realizadas (por ejemplo, programar historias/publicaciones) ni sesiones de Companion como tareas futuras. Las cuentas sin revisar se consultan en «Por revisar». Completar un pendiente lo conserva como resuelto; archivar su plataforma lo oculta sin borrarlo y reactivarla lo vuelve a mostrar si sigue abierto. Se excluyen tareas vacías o de clientes eliminados.
 
 ## Estructura técnica
 

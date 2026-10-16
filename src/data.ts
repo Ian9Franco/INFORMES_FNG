@@ -1,11 +1,14 @@
 import type { AdvertisingAccount } from './account-catalog'
+import type { WorkService } from './work-services'
+import type { ReviewIssue } from './review-issues'
 export type AdPlatform = 'meta_ads' | 'google_ads'
-export type Client = { id: string; name: string; active: boolean; archivedPlatforms?: AdPlatform[]; advertisingAccounts?: AdvertisingAccount[] }
+export type Client = { id: string; name: string; active: boolean; services?: WorkService[]; archivedServices?: WorkService[]; archivedPlatforms?: AdPlatform[]; advertisingAccounts?: AdvertisingAccount[] }
 import type { CustomAction, ReviewAction } from './review-actions'
-export type Review = { id: string; clientId: string; platform?: AdPlatform; date: string; createdAt: string; actions: string; observations: string; actionSchemaVersion?: 1; actionEntries?: ReviewAction[]; revision?: number }
-export type Pending = { id: string; clientId: string; platform?: AdPlatform; text: string; resolved: boolean }
-export type Activity = { id: string; platform: 'meta_ads' | 'google_ads'; accountCandidate: string | null; clientId: string | null; startedAt: string; endedAt: string; focusedMs: number; navigationSignals: number; date: string; status: 'pending' | 'dismissed' }
-export type Store = { clients: Client[]; reviews: Review[]; pending: Pending[]; closed: string[]; accountCatalogVersion?: number; activity?: Activity[]; customActions?: CustomAction[] }
+export type Review = { id: string; clientId: string; platform?: AdPlatform; service?: WorkService; issues?: ReviewIssue[]; date: string; createdAt: string; actions: string; observations: string; actionSchemaVersion?: 1; actionEntries?: ReviewAction[]; revision?: number }
+export type Pending = { id: string; clientId: string; platform?: AdPlatform; service?: WorkService; text: string; resolved: boolean }
+export type IssueState = { id: string; clientId: string; service: WorkService; date: string; reviewId: string; issues: ReviewIssue[] }
+export type Activity = { id: string; platform: 'meta_ads' | 'google_ads'; service?: WorkService; accountCandidate: string | null; clientId: string | null; startedAt: string; endedAt: string; focusedMs: number; navigationSignals: number; date: string; status: 'pending' | 'dismissed' }
+export type Store = { clients: Client[]; reviews: Review[]; pending: Pending[]; closed: string[]; accountCatalogVersion?: number; activity?: Activity[]; customActions?: CustomAction[]; issueStates?: IssueState[] }
 export const initial = ():Store => ({clients:[],reviews:[],pending:[],closed:[]})
 const key='informes-fng-v1'
 export function load():Store { try { const v=JSON.parse(localStorage.getItem(key)||'null'); return v && Array.isArray(v.clients) && Array.isArray(v.reviews) && Array.isArray(v.pending) && Array.isArray(v.closed) ? v as Store : initial() } catch { return initial() } }

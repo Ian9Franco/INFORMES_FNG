@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { activePlatforms, platformActive, scopedReviews, togglePlatform } from '../src/platforms.ts'
 import { activeReportStore } from '../src/report-export.ts'
 import { draftKey } from '../src/review-workflow.ts'
-const client={id:'c',name:'DOS PLATAFORMAS',active:true,advertisingAccounts:[{platform:'meta_ads',accountId:'9000000000000001',owner:''},{platform:'google_ads',accountId:'9000000001',owner:''}]}
+const client={id:'c',name:'DOS PLATAFORMAS',active:true,services:['meta_ads','google_ads'],advertisingAccounts:[{platform:'meta_ads',accountId:'9000000000000001',owner:''},{platform:'google_ads',accountId:'9000000001',owner:''}]}
 const meta={id:'m',typeId:'meta.ad.created',quantity:1,source:'manual',evidence:'user_confirmed'}
 const google={id:'g',typeId:'google.keyword.updated',quantity:2,source:'manual',evidence:'user_confirmed'}
 const legacy={id:'r',clientId:'c',date:'2026-10-15',createdAt:'2026-10-15T12:00:00Z',actions:'Nota previa',observations:'Observación',actionSchemaVersion:1,actionEntries:[meta,google],revision:7}
@@ -27,7 +27,7 @@ test('legacy mixed reviews project independent scopes, keep original notes once 
   assert.deepEqual(scopedReviews(reviews,[client]),reviews,'Projection must be idempotent')
 })
 test('reports retain only Google when Meta is archived, including old mixed actions and platform-specific tasks',()=>{
-  const store={clients:[togglePlatform(client,'meta_ads')],reviews:[legacy],pending:[{id:'pm',clientId:'c',platform:'meta_ads'},{id:'pg',clientId:'c',platform:'google_ads'},{id:'old',clientId:'c'}],closed:[]}
+  const store={clients:[togglePlatform(client,'meta_ads')],reviews:[legacy],pending:[{id:'pm',clientId:'c',platform:'meta_ads'},{id:'pg',clientId:'c',platform:'google_ads'},{id:'old',clientId:'c'}].map(task=>({...task,text:'Revisar presupuesto',resolved:false})),closed:[]}
   const report=activeReportStore(store)
   assert.equal(report.clients.length,1)
   assert.deepEqual(report.reviews.map(r=>r.platform),['google_ads'])

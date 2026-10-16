@@ -10,8 +10,9 @@ const measure=block=>10+block.items.reduce((sum,item)=>sum+10+item.text.length,0
 test('compact detail preserves actions, observations, weekdays and observed evidence without empty labels',()=>{
   assert.equal(compactReviewText(review),'Revisado sin cambios')
   const text=compactReviewText({...review,actions:'Detalle anterior',observations:'Nota importante',actionEntries:[{id:'a',typeId:'meta.ad.created',quantity:3,source:'manual',evidence:'user_confirmed'},{id:'s',typeId:'meta.post.scheduled',quantity:1,source:'companion',sourceEventId:'source',evidence:'observed',scheduledDays:['fri','mon']}]})
-  assert.equal(text.match(/Meta ·/g).length,1)
-  assert.match(text,/Añadí anuncios: 3; Programé publicación: 1 \(para lunes, viernes\) \(por confirmar\)/)
+  assert.equal(text.match(/Meta Ads ·/g).length,1)
+  assert.match(text,/Meta Ads · Añadí anuncios: 3/)
+  assert.match(text,/Meta orgánico · Programé publicación: 1 \(para lunes, viernes\) \(por confirmar\)/)
   assert.match(text,/Detalle anterior\nObservaciones · Nota importante/)
   assert.doesNotMatch(text,/Sin observaciones/)
 })

@@ -12,6 +12,9 @@ import { recordKey, rowsStore, storeRecords, type Change, type RecordRow } from 
 import WorkspaceSkeleton from './WorkspaceSkeleton'
 import WorkspaceControls from './WorkspaceControls'
 import type { CustomAction } from '../review-actions'
+import { definitionService } from '../review-actions'
+import { reviewService } from '../work-services'
+import { scopedReviews } from '../platforms'
 
 const columns = 'kind,id,payload,version,deleted,review_date,updated_at'
 
@@ -158,17 +161,17 @@ export default function CloudWorkspace({ user, onPassword, onSignOut }: { user: 
         const clientId = definition.scope === 'client' ? mapping.get(definition.clientId!) : undefined
         if (definition.scope === 'client' && !clientId) continue
         const remapped = { ...definition, ...(clientId ? { clientId } : {}) }
-        const existing = remote.customActions.find(item => item.id === definition.id || item.platform === definition.platform && item.scope === definition.scope && item.clientId === clientId && item.label.toLocaleLowerCase() === definition.label.toLocaleLowerCase())
+        const existing = remote.customActions.find(item => item.id === definition.id || definitionService(item) === definitionService(definition) && item.scope === definition.scope && item.clientId === clientId && item.label.toLocaleLowerCase() === definition.label.toLocaleLowerCase())
         if (!existing) remote.customActions.push(remapped)
         actionMapping.set(definition.id, existing ?? remapped)
       }
-      for (const review of old.reviews) {
+      for (const review of scopedReviews(old.reviews,old.clients)) {
         const clientId = mapping.get(review.clientId)
         const actionEntries = review.actionEntries?.map(entry => {
           const definition = actionMapping.get(entry.typeId)
           return definition ? { ...entry, typeId: definition.id, customDefinition: definition } : entry
         })
-        if (clientId && !remote.reviews.some(existing => existing.id === review.id || (existing.clientId === clientId && existing.date === review.date && existing.platform === review.platform))) remote.reviews.push({ ...review, clientId, ...(actionEntries ? { actionEntries } : {}) })
+        if (clientId && !scopedReviews(remote.reviews,remote.clients).some(existing => existing.id === review.id || (existing.clientId === clientId && existing.date === review.date && reviewService(existing) === reviewService(review)))) remote.reviews.push({ ...review, clientId, ...(actionEntries ? { actionEntries } : {}) })
       }
       for (const task of old.pending) { const clientId = mapping.get(task.clientId); if (clientId && !remote.pending.some(existing => existing.id === task.id)) remote.pending.push({ ...task, clientId }) }
       remote.closed = [...new Set([...remote.closed, ...old.closed])]

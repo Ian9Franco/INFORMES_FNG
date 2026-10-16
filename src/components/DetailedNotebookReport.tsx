@@ -4,6 +4,7 @@ import { date, format, type Store, weekDays } from '../data'
 import { sortClients } from '../clients'
 import { monthBounds } from '../sync/records'
 import { compactReviewText, paginateDetail, type DetailBlock, type DetailPage } from '../report-layout'
+import { serviceLabel } from '../work-services'
 
 function ClientBlock({ block }: { block: DetailBlock }) {
   return <section className="detail-client" data-detail-block={block.id}><h2>{block.title}{block.continued ? <small> · continuación</small> : null}</h2>{block.items.map(item => <article key={item.id} data-detail-item={item.id}>{item.date ? <b className="detail-date">{item.date}{item.continued ? <small>cont.</small> : null}</b> : null}<p>{item.text}</p></article>)}</section>
@@ -28,7 +29,7 @@ export default function DetailedNotebookReport({ store, week, month, title, prev
       return reviews.length ? [{ id: client.id, title: client.name, items: reviews.map(review => ({ id: review.id, date: `${review.date.slice(8, 10)}/${review.date.slice(5, 7)}`, text: compactReviewText(review) })) }] : []
     })
     const pending = store.pending.filter(item => !item.resolved)
-    if (pending.length) result.push({ id: '__pending', title: 'Pendientes abiertos', items: pending.map(item => ({ id: item.id, date: '', text: `${store.clients.find(client => client.id === item.clientId)?.name ?? 'Cliente archivado'} · ${item.text}` })) })
+    if (pending.length) result.push({ id: '__pending', title: 'Pendientes abiertos', items: pending.map(item => ({ id: item.id, date: '', text: `${store.clients.find(client => client.id === item.clientId)?.name ?? 'Cliente archivado'} · ${item.service || item.platform ? `${serviceLabel(item.service ?? item.platform!)} · ` : ''}${item.text}` })) })
     if (!result.length) result.push({ id: '__empty', title: 'Sin registros', items: [{ id: '__empty', date: '', text: 'Este período todavía no tiene revisiones registradas.' }] })
     return result
   }, [store, week, month])

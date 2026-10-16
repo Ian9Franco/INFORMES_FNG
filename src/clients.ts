@@ -7,5 +7,5 @@ export function sortClients<T extends { name: string; id: string }>(clients: rea
 export function withManagedClients(current: Store, imported: Store): Store {
   const ids = new Set(current.clients.map(client => client.id))
   if ([...imported.reviews, ...imported.pending, ...(imported.customActions ?? []).filter(action => action.scope === 'client')].some(item => !item.clientId || !ids.has(item.clientId))) throw Error('El respaldo contiene clientes inexistentes. Administralos primero desde la base de datos.')
-  return { ...imported, clients: current.clients, accountCatalogVersion: current.accountCatalogVersion }
+  return { ...imported, clients: current.clients, accountCatalogVersion: current.accountCatalogVersion, ...(current.issueStates ? { issueStates: current.issueStates } : {}) }
 }

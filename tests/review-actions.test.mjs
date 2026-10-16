@@ -18,7 +18,7 @@ test('custom actions have stable IDs, explicit scope and self-contained historic
   assert.equal(validReviewActions([{...entry,customDefinition:undefined}]),false)
   assert.equal(validReviewActions([{...entry,typeId:general.id}]),false)
   assert.equal(validReviewActions([{...manual,customDefinition:custom}]),false)
-  assert.match(describeReviewActions({actions:'',actionEntries:[entry]}),/Meta · Actualicé el catálogo: 3/)
+  assert.match(describeReviewActions({actions:'',actionEntries:[entry]}),/Meta Ads · Actualicé el catálogo: 3/)
 })
 
 test('scheduled publications have their own type and weekday summary', () => {
@@ -62,7 +62,7 @@ test('Companion proposals require provenance and remain unconfirmed in reports',
 test('legacy reviews retain their text; structured Meta and Google counts print together', () => {
   assert.equal(describeReviewActions({ actions: 'Texto anterior' }), 'Texto anterior')
   const text = describeReviewActions({ actions: 'Detalle libre', actionEntries: [manual, { ...manual, id: 'google-1', typeId: 'google.keyword.updated', quantity: 12 }] })
-  assert.match(text, /Meta · Añadí anuncios: 3/)
-  assert.match(text, /Google · Actualicé keywords: 12/)
+  assert.match(text, /Meta Ads · Añadí anuncios: 3/)
+  assert.match(text, /Google Ads · Actualicé keywords: 12/)
   assert.match(text, /Detalle libre/)
 })

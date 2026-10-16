@@ -2,10 +2,10 @@
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import { date, format, type Store, weekDays } from '../data'
-import { storyDaysLabel } from '../review-actions'
 import { sortClients } from '../clients'
 import { monthBounds } from '../sync/records'
-import { activePlatforms, platformLabel } from '../platforms'
+import { issueCellText } from '../review-issues'
+import { simpleActionSummary, simpleActionLegend } from '../simple-report'
 
 import DetailedNotebookReport from './DetailedNotebookReport'
 
@@ -58,20 +58,22 @@ function GridReport({ store, week, month, mode, title, preview = false }: { stor
     return () => { observer.disconnect(); window.removeEventListener('beforeprint', resize) }
   }, [store, week, month, mode, title, preview])
 
-  const paper = <div ref={sheet} data-export-page="1" className={`notebook-report ${mode === 'detalle' ? 'report-detail' : 'report-grid'}`}>
+  const paper = <div ref={sheet} data-export-page="1" className={`notebook-report ${mode === 'detalle' ? 'report-detail' : 'report-grid'} ${month ? 'is-monthly' : 'is-weekly'}`}>
     <header><div><span className="report-overline">LIBRETA DE SEGUIMIENTO</span><h1>{title}</h1><p>Publicidad · registro {month ? 'mensual' : 'semanal'}</p></div><div><small>{month ? 'MES' : 'SEMANA'}</small><strong>{weekLabel}</strong></div></header>
     <div className="report-body" ref={area}><div className="report-content" ref={content}>
-      {month ? <table><thead><tr><th>CLIENTE</th><th>REVISIONES</th><th>ACCIONES</th><th>ÚLTIMA REVISIÓN</th></tr></thead><tbody>{clients.filter(client => client.active || entries.some(review => review.clientId === client.id)).map(client => {
+      {month ? <table><thead><tr><th>CLIENTE</th><th title="Revisiones">REV.</th><th>ACCIONES</th><th>ÚLTIMA REVISIÓN</th></tr></thead><tbody>{clients.filter(client => client.active || entries.some(review => review.clientId === client.id)).map(client => {
         const reviews = entries.filter(review => review.clientId === client.id).sort((a,b) => a.date.localeCompare(b.date))
-        const scheduled = storyDaysLabel(reviews)
-        const posts = storyDaysLabel(reviews, true, 'meta.post.scheduled')
-        return <tr key={client.id}><td>{client.name}<small className="report-platforms">{activePlatforms(client).map(platformLabel).join(' · ')}</small></td><td>{reviews.length}</td><td>{reviews.reduce((sum, review) => sum + (review.actionEntries ?? []).reduce((total, action) => total + action.quantity, 0), 0)}{scheduled ? <small className="story-cell-note">H: {scheduled}</small> : null}{posts ? <small className="story-cell-note">P: {posts}</small> : null}</td><td>{reviews.length ? format(reviews[reviews.length - 1].date) : '—'}</td></tr>
-      })}</tbody></table> : <table><thead><tr><th>CLIENTE</th>{days.map((day, index) => <th key={day}>{weekdays[index]}<small>{format(day)}</small></th>)}</tr></thead><tbody>{active.map(client => <tr key={client.id}><td>{client.name}<small className="report-platforms">{activePlatforms(client).map(platformLabel).join(' · ')}</small></td>{days.map(day => {
-        const reviews = entries.filter(review => review.clientId === client.id && review.date === day)
-        const scheduled = storyDaysLabel(reviews)
-        const posts = storyDaysLabel(reviews, true, 'meta.post.scheduled')
-        return <td key={day}>{reviews.length ? '✓' : '·'}{scheduled ? <small className="story-cell-note">H: {scheduled}</small> : null}{posts ? <small className="story-cell-note">P: {posts}</small> : null}</td>
-      })}</tr>)}</tbody></table>}
+        const summary = simpleActionSummary(reviews,true)
+        return <tr key={client.id}><td>{client.name}</td><td>{reviews.length}</td><td className="simple-period-actions">{summary.join(' / ') || '—'}{issueCellText(reviews) ? <small className="report-issue">! {issueCellText(reviews)}</small> : null}{reviews.some(review => review.actions.trim()) ? <small className="simple-action-line">Notas en el detallado</small> : null}</td><td>{reviews.length ? format(reviews[reviews.length - 1].date) : '—'}</td></tr>
+      })}</tbody></table> : <table><thead><tr><th>CLIENTE</th>{days.map((day, index) => <th key={day}>{weekdays[index]}<small>{day.slice(8)}</small></th>)}<th>ACCIONES DE LA SEMANA</th></tr></thead><tbody>{active.map(client => {
+        const clientReviews = entries.filter(review => review.clientId === client.id)
+        const summary = simpleActionSummary(clientReviews,true)
+        return <tr key={client.id}><td>{client.name}</td>{days.map(day => {
+          const reviews = clientReviews.filter(review => review.date === day)
+          return <td key={day}>{issueCellText(reviews) ? '!' : reviews.length ? '✓' : '·'}</td>
+        })}<td className="simple-period-actions">{summary.join(' / ') || '—'}{issueCellText(clientReviews) ? <small className="report-issue">! {issueCellText(clientReviews)}</small> : null}{clientReviews.some(review => review.actions.trim()) ? <small className="simple-action-line">Notas en el detallado</small> : null}</td></tr>
+      })}</tbody></table>}
+      {simpleActionLegend(entries) ? <p className="simple-action-legend">{simpleActionLegend(entries)}</p> : null}
     </div></div>
     <footer><span>{title} · seguimiento publicitario</span><span>{new Date().toLocaleDateString('es-AR')} · 1 / 1</span></footer>
   </div>

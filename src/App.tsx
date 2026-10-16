@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from 'motion/react'
 import ThemeToggle from './components/ThemeToggle'
+import SlidingFilter from './components/SlidingFilter'
+import { openPendingTasks } from './pending-tasks'
+import ReviewIssues from './components/ReviewIssues'
+import { latestIssues, reviewIssueText, validReviewIssues, type ReviewIssue } from './review-issues'
+import { serviceProvider, reviewService, type WorkService } from './work-services'
+import { cadenceLabel, dailyRequired, weeklyServiceProgress } from './service-cadence'
 import useConfirmation from './components/useConfirmation'
 import ClientPicker from './components/ClientPicker'
 import NotebookReport from './components/NotebookReport'
@@ -13,7 +19,6 @@ import { sortClients, withManagedClients } from './clients'
 import { ExternalLink } from 'lucide-react'
 import { monthBounds, samePayload } from './sync/records'
 import { activePlatforms, clientPlatforms, platformActive, platformLabel, PLATFORMS, scopedReviews, togglePlatform } from './platforms'
-import type { AdPlatform } from './data'
 import QuickActions from './components/QuickActions'
 import ReviewDetailsFields from './components/ReviewDetailsFields'
 import RapidReviewSection from './components/RapidReviewSection'
@@ -21,7 +26,7 @@ import { NavigationIndicator, RapidSaveBar, ReviewState, ReviewStateLabel } from
 import NotebookPage from './components/NotebookPage'
 import { draftChanged, draftKey, nextPendingClient, readDrafts, reviewSignature, type ReviewDrafts } from './review-workflow'
 import { AnimatedChart } from './components/AnimatedSymbols'
-import { ACTION_SCHEMA_VERSION, describeReviewActions, storyDaysLabel, validReviewActions, type CustomAction, validCustomAction, type ReviewAction } from './review-actions'
+import { ACTION_SCHEMA_VERSION, describeReviewActions, entryService, storyDaysLabel, validReviewActions, type CustomAction, validCustomAction, type ReviewAction } from './review-actions'
 import {
   type Client,
   type Review,
@@ -38,6 +43,9 @@ import {
 type Tab = 'jornada' | 'semana' | 'clientes' | 'informes'
 type PrintMode = 'grilla' | 'detalle'
 type ClientFilter = 'activos' | 'archivados' | 'todos'
+type DailyFilter = 'todos' | 'pendientes' | 'revisados'
+const clientFilters: readonly { value: ClientFilter; label: string }[] = [{ value: 'activos', label: 'Activos' }, { value: 'archivados', label: 'Archivados' }, { value: 'todos', label: 'Todos' }]
+const dailyFilters: readonly { value: DailyFilter; label: string }[] = [{ value: 'todos', label: 'Todos' }, { value: 'pendientes', label: 'Por revisar' }, { value: 'revisados', label: 'Revisados' }]
 type IconName = 'home' | 'calendar' | 'users' | 'report' | 'plus' | 'search' | 'check' | 'clock' | 'archive' | 'trash' | 'download' | 'upload' | 'print' | 'chevron-left' | 'chevron-right' | 'close' | 'lock' | 'unlock'
 
 const weekdays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
@@ -108,7 +116,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const [reportMonth, setReportMonth] = useState(() => keyDate(new Date()).slice(0, 7))
   const remoteRef = useRef(initialData)
   const formRevision = useRef<number | undefined>(undefined)
-  const [selected, setSelected] = useState<{ id: string; day: string; platform: AdPlatform; mode: 'inline' | 'modal' } | null>(null)
+  const [selected, setSelected] = useState<{ id: string; day: string; platform: WorkService; mode: 'inline' | 'modal' } | null>(null)
   const [syncingReport, setSyncingReport] = useState(false)
   const formBase = useRef<Review | undefined>(undefined)
   const draftStorageKey = `fng-review-drafts:v1:${userId ?? 'local'}`
@@ -117,6 +125,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const [undoReview, setUndoReview] = useState<Review | null>(null)
   const [actions, setActions] = useState('')
   const [actionEntries, setActionEntries] = useState<ReviewAction[]>([])
+  const [issues, setIssues] = useState<ReviewIssue[]>([])
   const calm = useReducedMotion()
   const [observations, setObservations] = useState('')
   const [pendingText, setPendingText] = useState('')
@@ -128,7 +137,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [dailySearch, setDailySearch] = useState('')
-  const [dailyFilter, setDailyFilter] = useState<'todos' | 'pendientes' | 'revisados'>('todos')
+  const [dailyFilter, setDailyFilter] = useState<DailyFilter>('todos')
   const [showActivity, setShowActivity] = useState(false)
   const [closingReview, setClosingReview] = useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -147,17 +156,17 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const clients = useMemo(() => sortClients(db.clients), [db.clients])
   const active = clients.filter(clientItem => activePlatforms(clientItem).length)
   const reviews = useMemo(() => scopedReviews(db.reviews,db.clients), [db.reviews,db.clients])
-  const targetsToday = active.reduce((sum,client) => sum + activePlatforms(client).length,0)
+  const targetsToday = active.reduce((sum,client) => sum + activePlatforms(client).filter(service => dailyRequired(service,today)).length,0)
   const closed = db.closed.includes(week)
   const inWeek = reviews.filter(reviewItem => days.includes(reviewItem.date))
   const monthRange = monthBounds(reportMonth)
   const reportStore = useMemo(() => activeReportStore(db), [db])
   const reportReviews = reportStore.reviews.filter(review => reportPeriod === 'month' ? review.date >= monthRange.start && review.date < monthRange.end : days.includes(review.date))
-  const reportPending = reportStore.pending.filter(item => !item.resolved)
-  const pending = reportStore.pending.filter(item => !item.resolved)
-  const reviewsToday = active.reduce((sum,client) => sum + activePlatforms(client).filter(platform => reviews.some(review => review.clientId === client.id && review.date === today && review.platform === platform)).length,0)
+  const pending = useMemo(() => openPendingTasks(db), [db])
+  const reportPending = pending
+  const reviewsToday = active.reduce((sum,client) => sum + activePlatforms(client).filter(platform => dailyRequired(platform,today) && reviews.some(review => review.clientId === client.id && review.date === today && reviewService(review) === platform)).length,0)
   const completion = targetsToday ? Math.round((reviewsToday / targetsToday) * 100) : 0
-  const current = selected ? reviews.find(reviewItem => reviewItem.clientId === selected.id && reviewItem.date === selected.day && reviewItem.platform === selected.platform) : undefined
+  const current = selected ? reviews.find(reviewItem => reviewItem.clientId === selected.id && reviewItem.date === selected.day && reviewService(reviewItem) === selected.platform) : undefined
   const client = selected ? db.clients.find(clientItem => clientItem.id === selected.id) : undefined
   const weekLabel = `${format(days[0])} al ${format(days[5])} de ${date(days[5]).getFullYear()}`
   const reportLabel = reportPeriod === 'month' ? new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(date(monthRange.start)) : `Semana del ${weekLabel}`
@@ -176,11 +185,11 @@ export default function App({ initialData, onChange, storageMode = 'local', user
 
   function stashDraft() {
     if (!selected || closingReview) return
-    const draft = { clientId: selected.id, day: selected.day, platform: selected.platform, base: formBase.current, actions, observations, actionEntries, pendingText, updatedAt: new Date().toISOString() }
+    const draft = { clientId: selected.id, day: selected.day, platform: selected.platform, serviceVersion: 1 as const, base: formBase.current, actions, observations, actionEntries, issues, pendingText, updatedAt: new Date().toISOString() }
     if (selected.id) updateDraft(draftKey(selected.id, selected.day, selected.platform), draftChanged(draft) ? draft : null)
   }
 
-  useEffect(() => { stashDraft() }, [selected, actions, observations, actionEntries, pendingText, closingReview])
+  useEffect(() => { stashDraft() }, [selected, actions, observations, actionEntries, issues, pendingText, closingReview])
   useEffect(() => {
     if (!undoReview) return
     const timer = setTimeout(() => setUndoReview(null), 8000)
@@ -304,11 +313,17 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     return () => window.clearTimeout(timer)
   }, [notice])
 
-  function findReview(clientId: string, day: string, platform: AdPlatform = selected?.platform ?? 'meta_ads') {
-    return reviews.find(reviewItem => reviewItem.clientId === clientId && reviewItem.date === day && reviewItem.platform === platform)
+  function findReview(clientId: string, day: string, platform: WorkService = selected?.platform ?? 'meta_ads') {
+    return reviews.find(reviewItem => reviewItem.clientId === clientId && reviewItem.date === day && reviewService(reviewItem) === platform)
   }
 
-  function openReview(clientId: string, day: string, mode: 'inline' | 'modal' = 'modal', discardDraft = false, platform: AdPlatform = selected?.platform ?? 'meta_ads') {
+  function observedService(event: NonNullable<Store['activity']>[number]): WorkService {
+    if (event.service) return event.service
+    const target = clients.find(client => client.id === event.clientId)
+    return event.platform === 'meta_ads' && target && !platformActive(target,'meta_ads') && platformActive(target,'meta_organic') ? 'meta_organic' : event.platform
+  }
+
+  function openReview(clientId: string, day: string, mode: 'inline' | 'modal' = 'modal', discardDraft = false, platform: WorkService = selected?.platform ?? 'meta_ads') {
     const target = dbRef.current.clients.find(client => client.id === clientId)
     if (target && !platformActive(target,platform)) { setNotice('Esta cuenta está archivada en la plataforma seleccionada. Reactivala desde Clientes.'); return }
     if (db.closed.includes(monday(date(day)))) {
@@ -317,13 +332,15 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     }
     stashDraft()
     if (discardDraft) updateDraft(draftKey(clientId, day,platform), null)
-    const reviewItem = scopedReviews(dbRef.current.reviews,dbRef.current.clients).find(item => item.clientId === clientId && item.date === day && item.platform === platform)
+    const scoped = scopedReviews(dbRef.current.reviews,dbRef.current.clients)
+    const reviewItem = scoped.find(item => item.clientId === clientId && item.date === day && reviewService(item) === platform)
     const draft = discardDraft ? undefined : draftsRef.current[draftKey(clientId, day,platform)]
     formBase.current = draft ? draft.base : reviewItem
     formRevision.current = formBase.current?.revision
     setSelected({ id: clientId, day, mode, platform })
     setActions(draft?.actions ?? reviewItem?.actions ?? '')
     setActionEntries(draft?.actionEntries ?? (validReviewActions(reviewItem?.actionEntries) ? reviewItem.actionEntries : []))
+    setIssues(draft?.issues ?? latestIssues(scoped,clientId,platform,day,dbRef.current.issueStates))
     setObservations(draft?.observations ?? reviewItem?.observations ?? '')
     setPendingText(draft?.pendingText ?? '')
     // Expanding a client must keep the user's reading position unchanged.
@@ -331,15 +348,18 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   }
 
   function saveReview(andNext = false) {
-    if (!selected?.id || closingReview || db.closed.includes(monday(date(selected.day))) || !validReviewActions(actionEntries)) return
+    if (!selected?.id || closingReview || db.closed.includes(monday(date(selected.day))) || !validReviewActions(actionEntries) || !validReviewIssues(issues)) return
+    if (actionEntries.some(entry => entryService(entry) !== selected.platform)) { setError('Una acción pertenece a otro servicio. Volvé a abrir la revisión para separar el registro.'); return }
     if (actionEntries.some(entry => entry.customDefinition && (entry.customDefinition.scope === 'client' && entry.customDefinition.clientId !== selected.id || !dbRef.current.customActions?.some(definition => definition.id === entry.typeId)))) { setError('Una acción no está disponible para este cliente. Quitala y seleccioná una del catálogo.'); return }
     const group = scopedReviews(dbRef.current.reviews.filter(item => item.clientId === selected.id && item.date === selected.day),dbRef.current.clients)
-    const previous = group.find(item => item.platform === selected.platform)
+    const previous = group.find(item => reviewService(item) === selected.platform)
     if (previous?.revision !== formRevision.current || reviewSignature(previous) !== reviewSignature(formBase.current)) { setNotice('Esta revisión cambió en otro dispositivo. Tu borrador está conservado; copiá tus notas y cargá la versión actual antes de guardar.'); return }
     const item: Review = {
       id: previous?.id ?? uid(),
       clientId: selected.id,
-      platform: selected.platform,
+      platform: serviceProvider(selected.platform),
+      service: selected.platform,
+      issues,
       date: selected.day,
       createdAt: previous?.createdAt ?? new Date().toISOString(),
       actions: actions.trim(),
@@ -349,11 +369,11 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     }
     setDb(currentDb => ({
       ...currentDb,
-      reviews: [...currentDb.reviews.filter(reviewItem => reviewItem.clientId !== selected.id || reviewItem.date !== selected.day), ...group.filter(review => review.platform !== selected.platform), item],
-      pending: pendingText.trim() ? [...currentDb.pending, { id: uid(), clientId: selected.id, platform: selected.platform, text: pendingText.trim(), resolved: false }] : currentDb.pending,
+      reviews: [...currentDb.reviews.filter(reviewItem => reviewItem.clientId !== selected.id || reviewItem.date !== selected.day), ...group.filter(review => reviewService(review) !== selected.platform), item],
+      pending: pendingText.trim() ? [...currentDb.pending, { id: uid(), clientId: selected.id, platform: serviceProvider(selected.platform), service: selected.platform, text: pendingText.trim(), resolved: false }] : currentDb.pending,
     }))
     updateDraft(draftKey(selected.id, selected.day,selected.platform), null)
-    const next = andNext ? nextPendingClient((tab === 'jornada' ? dailyClients : active).filter(client => platformActive(client,selected.platform)), scopedReviews(dbRef.current.reviews,dbRef.current.clients).filter(review => review.platform === selected.platform), selected.day, selected.id) : undefined
+    const next = andNext ? nextPendingClient((tab === 'jornada' ? dailyClients : active).filter(client => platformActive(client,selected.platform)), scopedReviews(dbRef.current.reviews,dbRef.current.clients).filter(review => reviewService(review) === selected.platform), selected.day, selected.id) : undefined
     if (next) {
       // Reset the saved form before opening the next client; never re-stash it.
       const draft = draftsRef.current[draftKey(next.id, selected.day,selected.platform)]
@@ -362,6 +382,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
       setSelected({ ...selected, id: next.id })
       setActions(draft?.actions ?? ''); setObservations(draft?.observations ?? '')
       setActionEntries(draft?.actionEntries ?? []); setPendingText(draft?.pendingText ?? '')
+      setIssues(draft?.issues ?? latestIssues(scopedReviews(dbRef.current.reviews,dbRef.current.clients),next.id,selected.platform,selected.day,dbRef.current.issueStates))
       if (selected.mode === 'inline') {
         if (rowScrollTimer.current) clearTimeout(rowScrollTimer.current)
         rowScrollTimer.current = setTimeout(() => {
@@ -375,10 +396,10 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     setNotice(previous ? 'Revisión actualizada' : 'Revisión registrada')
   }
 
-  function reviewWithoutChanges(clientId: string, platform: AdPlatform) {
+  function reviewWithoutChanges(clientId: string, platform: WorkService) {
     const group = scopedReviews(dbRef.current.reviews.filter(item => item.clientId === clientId && item.date === today),dbRef.current.clients)
-    if (dbRef.current.closed.includes(monday(date(today))) || group.some(item => item.platform === platform) || draftsRef.current[draftKey(clientId, today,platform)]) return
-    const item: Review = { id: uid(), clientId, platform, date: today, createdAt: new Date().toISOString(), actions: '', observations: '', actionSchemaVersion: ACTION_SCHEMA_VERSION, actionEntries: [] }
+    if (dbRef.current.closed.includes(monday(date(today))) || group.some(item => reviewService(item) === platform) || draftsRef.current[draftKey(clientId, today,platform)]) return
+    const item: Review = { id: uid(), clientId, platform: serviceProvider(platform), service: platform, issues: latestIssues(scopedReviews(dbRef.current.reviews,dbRef.current.clients),clientId,platform,today,dbRef.current.issueStates), date: today, createdAt: new Date().toISOString(), actions: '', observations: '', actionSchemaVersion: ACTION_SCHEMA_VERSION, actionEntries: [] }
     setDb(currentDb => ({ ...currentDb, reviews: [...currentDb.reviews.filter(review => review.clientId !== clientId || review.date !== today), ...group, item] }))
     setUndoReview(item)
   }
@@ -406,7 +427,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     if (!selected?.id || !pendingText.trim()) return
     setDb(currentDb => ({
       ...currentDb,
-      pending: [...currentDb.pending, { id: uid(), clientId: selected.id, platform: selected.platform, text: pendingText.trim(), resolved: false }],
+      pending: [...currentDb.pending, { id: uid(), clientId: selected.id, platform: serviceProvider(selected.platform), service: selected.platform, text: pendingText.trim(), resolved: false }],
     }))
     setPendingText('')
     setNotice('Pendiente agregado')
@@ -430,7 +451,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   }
 
 
-  function toggleClient(clientItem: Client, platform: AdPlatform) {
+  function toggleClient(clientItem: Client, platform: WorkService) {
     setDb(currentDb => ({
       ...currentDb,
       clients: currentDb.clients.map(item => item.id === clientItem.id ? togglePlatform(item,platform) : item),
@@ -501,6 +522,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
       if (!value || typeof value !== 'object' || !('clients' in value) || !('reviews' in value) || !('pending' in value) || !('closed' in value) || !Array.isArray(value.clients) || !Array.isArray(value.reviews) || !Array.isArray(value.pending) || !Array.isArray(value.closed)) throw Error('Formato inválido')
       if ('customActions' in value && (!Array.isArray(value.customActions) || !value.customActions.every(validCustomAction))) throw Error('Catálogo inválido')
       if (value.reviews.some(item => !item || typeof item !== 'object' || ('actionEntries' in item && (!validReviewActions(item.actionEntries) || item.actionSchemaVersion !== ACTION_SCHEMA_VERSION)))) throw Error('Acciones inválidas')
+      if (value.reviews.some(item => 'issues' in item && !validReviewIssues(item.issues))) throw Error('Incidencias inválidas')
       if (await confirm({ title: '¿Restaurar respaldo?', message: 'Se restaurarán los registros operativos. El catálogo de clientes y cuentas se conserva desde la base de datos. Descargá una copia actual antes de continuar.', accept: 'Restaurar registros', danger: true })) {
         const store = withManagedClients(dbRef.current, value as Store)
         // Old backups must not tombstone immutable definitions or orphan their clients.
@@ -566,15 +588,18 @@ export default function App({ initialData, onChange, storageMode = 'local', user
       {notice ? <div role="status" className="toast"><Icon name="check" />{notice}</div> : null}
 
       {tab === 'jornada' ? <>
-        {(db.activity ?? []).some(event => event.status === 'pending' && event.date === today) ? <section className={`panel activity-inbox ${showActivity ? 'is-open' : ''}`}><div className="panel-heading"><div><span className="section-kicker">COMPANION</span><h2>Actividad de tu PC</h2><p>Sesiones observadas; confirmá la revisión para completar el día.</p></div><button type="button" className="text-button" aria-expanded={showActivity} aria-controls="activity-records" onClick={() => setShowActivity(!showActivity)}>{showActivity ? 'Ocultar' : `Ver ${(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).length}`}<Icon name="chevron-right" size={15} /></button></div><div id="activity-records" hidden={!showActivity}>{(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).map(event => <article key={event.id}><div><strong>{clients.find(client => client.id === event.clientId)?.name ?? `Cuenta sin vincular: ${event.accountCandidate ?? 'sin ID'}`}</strong><p>{event.platform === 'meta_ads' ? 'Meta Ads' : 'Google Ads'} · {Math.floor(event.focusedMs / 60000)} min estimados · {event.navigationSignals} señales</p></div>{event.clientId ? <button className="secondary-button" onClick={() => openReview(event.clientId!, event.date, 'modal', false, event.platform)}>{findReview(event.clientId, event.date, event.platform) ? 'Ver revisión' : 'Registrar revisión'}</button> : null}<button className="icon-button" aria-label="Descartar sesión" onClick={() => setDb(currentDb => ({ ...currentDb, activity: currentDb.activity?.map(item => item.id === event.id ? { ...item, status: 'dismissed' } : item) }))}><Icon name="close" /></button></article>)}</div></section> : null}
+        {(db.activity ?? []).some(event => event.status === 'pending' && event.date === today) ? <section className={`panel activity-inbox ${showActivity ? 'is-open' : ''}`}>
+          <div className="panel-heading"><div><span className="section-kicker">COMPANION</span><h2>Actividad de tu PC</h2><p>Sesiones observadas; confirmá la revisión para completar el día.</p></div><button type="button" className="text-button" aria-expanded={showActivity} aria-controls="activity-records" onClick={() => setShowActivity(!showActivity)}>{showActivity ? 'Ocultar' : `Ver ${(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).length}`}<Icon name="chevron-right" size={15} /></button></div>
+          <div id="activity-records" hidden={!showActivity}>{(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).map(event => <article key={event.id}><div><strong>{clients.find(client => client.id === event.clientId)?.name ?? `Cuenta sin vincular: ${event.accountCandidate ?? 'sin ID'}`}</strong><p>{platformLabel(observedService(event))} · {Math.floor(event.focusedMs / 60000)} min estimados · {event.navigationSignals} señales</p></div>{event.clientId ? <button className="secondary-button" onClick={() => openReview(event.clientId!, event.date, 'modal', false, observedService(event))}>{findReview(event.clientId, event.date, observedService(event)) ? 'Ver revisión' : 'Registrar revisión'}</button> : null}<button className="icon-button" aria-label="Descartar sesión" onClick={() => setDb(currentDb => ({ ...currentDb, activity: currentDb.activity?.map(item => item.id === event.id ? { ...item, status: 'dismissed' } : item) }))}><Icon name="close" /></button></article>)}</div>
+        </section> : null}
         <div className="daily-overview"><section className="hero-panel">
-          <div><span className="section-kicker">PROGRESO DEL DÍA</span><h2>{completion === 100 && active.length ? 'Jornada completa' : 'Seguimiento en curso'}</h2><p>{reviewsToday} de {targetsToday} cuentas activas revisadas.</p></div>
-          <div className="progress-ring" style={{ '--progress': `${completion * 3.6}deg` } as React.CSSProperties}><span><b>{completion}%</b><small>completo</small></span></div>
+          <div><span className="section-kicker">REVISIÓN DIARIA · META ADS</span><h2>{!targetsToday ? 'Sin obligación diaria hoy' : completion === 100 ? 'Meta Ads al día' : 'Seguimiento en curso'}</h2><p>{reviewsToday} de {targetsToday} cuentas Meta Ads revisadas. Google y orgánico tienen frecuencia semanal flexible.</p></div>
+          <div className="progress-ring" style={{ '--progress': `${completion * 3.6}deg` } as React.CSSProperties}><span><b>{targetsToday ? `${completion}%` : '—'}</b><small>Meta Ads</small></span></div>
         </section>
 
         <section className="metrics-grid" aria-label="Resumen de la jornada">
-          <article><span className="metric-icon success"><Icon name="check" /></span><div><small>Revisados hoy</small><strong>{reviewsToday}</strong><p>Con registro confirmado</p></div></article>
-          <article><span className="metric-icon pending"><Icon name="clock" /></span><div><small>Por revisar</small><strong>{Math.max(0, targetsToday - reviewsToday)}</strong><p>Cuentas activas restantes</p></div></article>
+          <article><span className="metric-icon success"><Icon name="check" /></span><div><small>Meta Ads revisados</small><strong>{reviewsToday}</strong><p>Con registro confirmado</p></div></article>
+          <article><span className="metric-icon pending"><Icon name="clock" /></span><div><small>Meta Ads por revisar</small><strong>{Math.max(0, targetsToday - reviewsToday)}</strong><p>De lunes a viernes</p></div></article>
           <article><span className="metric-icon neutral"><Icon name="report" /></span><div><small>Pendientes abiertos</small><strong>{pending.length}</strong><p>Acciones para continuar</p></div></article>
         </section></div>
 
@@ -582,46 +607,55 @@ export default function App({ initialData, onChange, storageMode = 'local', user
           <section className="panel daily-list">
             <div className="panel-heading"><div><span className="section-kicker">CUENTAS ACTIVAS</span><h2>Revisiones de hoy</h2></div><button className="text-button" onClick={() => navigate('semana')}>Ver semana <Icon name="chevron-right" /></button></div>
             <div className="search-box daily-search"><Icon name="search" /><input type="search" value={dailySearch} onChange={event => { if (selected?.mode === 'inline') closeReview(); setDailySearch(event.target.value) }} placeholder="Buscar en tus clientes" aria-label="Buscar en la jornada" /></div>
-            <div className="segmented daily-filter" aria-label="Filtrar revisiones de hoy">{(['todos', 'pendientes', 'revisados'] as const).map(filter => <button key={filter} aria-pressed={dailyFilter === filter} className={dailyFilter === filter ? 'active' : ''} onClick={() => { if (selected?.mode === 'inline') closeReview(); setDailyFilter(filter) }}>{filter === 'todos' ? 'Todos' : filter === 'pendientes' ? 'Por revisar' : 'Revisados'}</button>)}</div>
-            {PLATFORMS.map(platform => <section key={platform} className="platform-section" aria-label={`Revisiones ${platformLabel(platform)}`}><header className="platform-section-heading"><h3>{platformLabel(platform)}</h3><span>{active.filter(client => platformActive(client,platform)).length} cuentas</span></header>
-            {dailyClients.some(client => platformActive(client,platform)) ? <div className="review-list">{dailyClients.filter(client => platformActive(client,platform) && (dailyFilter === 'todos' || Boolean(findReview(client.id,today,platform)) === (dailyFilter === 'revisados'))).map(clientItem => {
+            <SlidingFilter label="Filtrar revisiones de hoy" className="daily-filter" value={dailyFilter} options={dailyFilters} onChange={filter => { if (selected?.mode === 'inline') closeReview(); setDailyFilter(filter) }} />
+            {PLATFORMS.map(platform => {
+              const accounts = active.filter(client => platformActive(client,platform))
+              const visible = dailyClients.filter(client => platformActive(client,platform) && (dailyFilter === 'todos' || Boolean(findReview(client.id,today,platform)) === (dailyFilter === 'revisados')))
+              const emptyText = !accounts.length ? 'Sin cuentas activas en esta plataforma.' : dailySearch.trim() ? 'No hay cuentas que coincidan con la búsqueda y el filtro.' : dailyFilter === 'revisados' ? 'Todavía no hay revisiones registradas hoy en esta plataforma.' : dailyFilter === 'pendientes' ? 'Todas las cuentas de esta plataforma están revisadas hoy.' : 'Sin cuentas para mostrar.'
+              return <section key={platform} className="platform-section" aria-label={`Revisiones ${platformLabel(platform)}`}><header className="platform-section-heading"><div><h3>{platformLabel(platform)}</h3><p className="service-cadence">{cadenceLabel(platform)}{!dailyRequired(platform,today) ? ' · sin obligación de revisar hoy' : ''}</p></div><span>{accounts.length} {accounts.length === 1 ? 'cliente' : 'clientes'}</span></header>
+            {visible.length ? <div className="review-list">{visible.map(clientItem => {
               const reviewItem = findReview(clientItem.id, today,platform)
               const expanded = selected?.mode === 'inline' && selected.id === clientItem.id && selected.day === today && selected.platform === platform
               const hasDraft = Boolean(drafts[draftKey(clientItem.id, today,platform)])
+              const rowIssues = reviewItem?.issues ?? latestIssues(reviews,clientItem.id,platform,today,db.issueStates)
+              const issueLabel = reviewIssueText({ issues: rowIssues })
               const dayClosed = db.closed.includes(monday(date(today)))
-              return <article key={clientItem.id} data-client-id={clientItem.id} data-platform={platform} className={`review-item ${expanded ? 'is-expanded' : ''}`}>
+              return <article key={clientItem.id} data-client-id={clientItem.id} data-platform={platform} className={`review-item ${expanded ? 'is-expanded' : ''} ${issueLabel ? 'has-issue' : ''}`}>
               <div className="review-row-header"><button className="review-row" aria-expanded={expanded} aria-controls={`rapid-${platform}-${clientItem.id}`} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline',false,platform)}>
-                <ReviewState reviewed={Boolean(reviewItem)} />
-                <span className="review-name"><strong>{clientItem.name}</strong><small>{reviewItem ? `${storyDaysLabel([reviewItem]) ? `Historia → ${storyDaysLabel([reviewItem])} · ` : ''}${storyDaysLabel([reviewItem], true, 'meta.post.scheduled') ? `Publicación → ${storyDaysLabel([reviewItem], true, 'meta.post.scheduled')} · ` : ''}${describeReviewActions(reviewItem) || reviewItem.observations || 'Revisión registrada'}` : 'Todavía sin revisar'}</small></span>
-                <ReviewStateLabel reviewed={Boolean(reviewItem)} label={hasDraft ? 'Borrador' : reviewItem ? 'Revisado' : 'Pendiente'} />
+                <ReviewState reviewed={Boolean(reviewItem)} issue={Boolean(issueLabel)} />
+                <span className="review-name"><strong>{clientItem.name}</strong><small className={issueLabel ? 'issue-text' : undefined}>{issueLabel ? `${issueLabel} · ` : ''}{reviewItem ? `${storyDaysLabel([reviewItem]) ? `Historia → ${storyDaysLabel([reviewItem])} · ` : ''}${storyDaysLabel([reviewItem], true, 'meta.post.scheduled') ? `Publicación → ${storyDaysLabel([reviewItem], true, 'meta.post.scheduled')} · ` : ''}${describeReviewActions(reviewItem) || reviewItem.observations || 'Revisión registrada'}` : 'Todavía sin revisar'}</small>{platform !== 'meta_ads' ? <small className="service-progress">{weeklyServiceProgress(reviews,clientItem.id,platform,today).label}</small> : null}</span>
+                <ReviewStateLabel reviewed={Boolean(reviewItem)} issue={Boolean(issueLabel)} label={hasDraft ? 'Borrador' : reviewItem ? issueLabel ? 'Con alerta' : 'Revisado' : dailyRequired(platform,today) ? 'Pendiente' : 'Opcional'} />
                 <Icon name="chevron-right" />
               </button>
               <div className="review-row-tools"><button type="button" className={`one-touch-review ${reviewItem ? 'is-confirmed' : ''}`} aria-disabled={Boolean(reviewItem) || dayClosed || hasDraft || expanded} onClick={() => { if (!dayClosed && !hasDraft && !expanded && !reviewItem) reviewWithoutChanges(clientItem.id,platform) }} aria-label={`${reviewItem ? 'Revisión confirmada' : 'Revisado sin cambios'}: ${clientItem.name}`}><Icon name="check" size={15} /><span>{reviewItem ? 'Revisado' : 'Sin cambios'}</span></button><button type="button" className="quick-register" disabled={dayClosed} onClick={() => expanded ? closeReview() : openReview(clientItem.id, today, 'inline',false,platform)} aria-label={`${expanded ? 'Cerrar registro' : reviewItem ? 'Editar revisión' : 'Registrar acciones'}: ${clientItem.name}`}>{expanded ? 'Cerrar' : hasDraft ? 'Continuar' : reviewItem ? 'Editar' : 'Registrar'}</button></div></div>
               <AnimatePresence initial={false}>{expanded ? <RapidReviewSection id={`rapid-${platform}-${clientItem.id}`} key="editor" label={`Registro rápido de ${clientItem.name}`} onKeyDown={reviewShortcut}>
                 <div className="rapid-review-heading"><span>Borrador en este dispositivo · confirmá para completar</span><button type="button" className="text-button" onClick={() => setSelected({ ...selected!, mode: 'modal' })}>Edición detallada <Icon name="chevron-right" size={14} /></button></div>
+                <ReviewIssues value={issues} onChange={setIssues} organic={platform === 'meta_organic'} />
                 {reviewSignature(current) !== reviewSignature(formBase.current) ? <div className="draft-conflict" role="status">La revisión cambió. Conservamos tu borrador.<button type="button" onClick={reloadReview}>Cargar versión actual</button></div> : null}
                 <QuickActions lockedPlatform={platform} clientId={selected?.id} catalog={db.customActions} onCreate={createAction} value={actionEntries} onChange={setActionEntries} compact storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
                 <details className="rapid-details"><summary>Notas y pendientes{actions || observations || pendingText ? ' · con contenido' : ' · opcional'}</summary><ReviewDetailsFields actions={actions} observations={observations} pendingText={pendingText} onActions={setActions} onObservations={setObservations} onPending={setPendingText} onAddPending={addPending} /></details>
               </RapidReviewSection> : null}</AnimatePresence>
               </article>
-            })}</div> : <p className="platform-empty">Sin cuentas activas en esta plataforma.</p>}</section>)}
+            })}</div> : <p className="platform-empty">{emptyText}</p>}</section>})}
           </section>
 
-          <section className="panel tasks-panel">
+          <section className="panel tasks-panel" aria-label="Próximas acciones">
             <div className="panel-heading"><div><span className="section-kicker">PRÓXIMAS ACCIONES</span><h2>Mis pendientes</h2></div><span className="count-chip">{pending.length}</span></div>
+            <p className="tasks-help">Pendientes guardados, de cualquier fecha. Las cuentas sin revisar están en «Por revisar».</p>
             {pending.length ? <div className="task-list">{pending.map(item => <div className="task-row" key={item.id}>
               <button className="task-check" onClick={() => resolvePending(item.id)} aria-label={`Completar pendiente: ${item.text}`}><Icon name="check" /></button>
-              <div><strong>{db.clients.find(clientItem => clientItem.id === item.clientId)?.name ?? 'Cliente archivado'}</strong><p>{item.text}</p></div>
-            </div>)}</div> : <EmptyState icon="check" title="Todo al día" text="Los pendientes que agregues en una revisión aparecerán acá." />}
+              <div><div className="task-identity"><strong>{db.clients.find(clientItem => clientItem.id === item.clientId)?.name}</strong><span className="task-platform">{item.service || item.platform ? platformLabel(item.service ?? item.platform!) : 'General'}</span></div><p>{item.text.trim()}</p></div>
+            </div>)}</div> : <EmptyState icon="check" title="Sin pendientes abiertos" text="Agregá un «Nuevo pendiente» en una revisión. Las acciones ya realizadas, como programar una historia, no generan pendientes automáticamente." />}
           </section>
         </div>
       </> : null}
 
       {tab === 'semana' ? <section className="panel week-panel">
         <div className="panel-heading week-heading"><div><div className="inline-title"><span className="section-kicker">SEMANA DEL</span>{closed ? <span className="closed-badge"><Icon name="lock" size={13} />Cerrada</span> : null}</div><h2>{weekLabel}</h2><p>{inWeek.length} revisiones registradas en este período.</p></div><WeekPicker label={weekLabel} onPrevious={() => changeWeek(-1)} onNext={() => changeWeek(1)} /></div>
-        {PLATFORMS.map(platform => <section className="platform-section" aria-label={`Semana ${platformLabel(platform)}`} key={platform}><header className="platform-section-heading"><h3>{platformLabel(platform)}</h3><span>{active.filter(client => platformActive(client,platform)).length} cuentas</span></header><div className="table-scroll"><table className="week-table"><thead><tr><th>Cliente</th>{days.map((day, index) => <th key={day}><span>{weekdays[index]}</span><small>{format(day)}</small></th>)}</tr></thead><tbody>{active.filter(client => platformActive(client,platform)).map(clientItem => <tr key={clientItem.id}><th><span className="client-avatar">{clientItem.name.slice(0, 2)}</span><strong>{clientItem.name}</strong></th>{days.map(day => {
+        {PLATFORMS.map(platform => <section className="platform-section" aria-label={`Semana ${platformLabel(platform)}`} key={platform}><header className="platform-section-heading"><div><h3>{platformLabel(platform)}</h3><p className="service-cadence">{cadenceLabel(platform)}</p></div><span>{active.filter(client => platformActive(client,platform)).length} clientes</span></header><div className="table-scroll"><table className="week-table"><thead><tr><th>Cliente</th>{days.map((day, index) => <th key={day}><span>{weekdays[index]}</span><small>{format(day)}</small></th>)}</tr></thead><tbody>{active.filter(client => platformActive(client,platform)).map(clientItem => <tr key={clientItem.id}><th><span className="client-avatar">{clientItem.name.slice(0, 2)}</span><strong>{clientItem.name}</strong></th>{days.map(day => {
           const reviewItem = findReview(clientItem.id, day,platform)
-          return <td key={day}><button disabled={closed} className={reviewItem ? 'reviewed' : ''} onClick={() => openReview(clientItem.id, day,'modal',false,platform)} aria-label={`Revisión de ${clientItem.name} para ${day}`}>{reviewItem ? <Icon name="check" /> : <Icon name="plus" size={15} />}</button></td>
+          const issue = reviewItem ? reviewIssueText(reviewItem) : ''
+          return <td key={day}><button disabled={closed} className={`${reviewItem ? 'reviewed' : ''} ${issue ? 'has-issue' : ''}`} title={issue || undefined} onClick={() => openReview(clientItem.id, day,'modal',false,platform)} aria-label={`Revisión de ${clientItem.name} para ${day}${issue ? ` · ${issue}` : ''}`}>{issue ? '!' : reviewItem ? <Icon name="check" /> : <Icon name="plus" size={15} />}</button></td>
         })}</tr>)}</tbody></table></div></section>)}
         {!active.length ? <EmptyState icon="users" title="No hay clientes activos" text="Reactivá un cliente archivado o administrá el catálogo desde la base de datos." /> : null}
         <div className="panel-footer"><p><span className="legend-dot reviewed" />Revisado <span className="legend-dot" />Sin revisar</p><div><button className="secondary-button" onClick={toggleWeekClosed}><Icon name={closed ? 'unlock' : 'lock'} />{closed ? 'Reabrir semana' : 'Cerrar semana'}</button><button className="primary-button" onClick={() => { setPrintMode('grilla'); navigate('informes') }}><Icon name="print" />Preparar informe</button></div></div>
@@ -634,13 +668,13 @@ export default function App({ initialData, onChange, storageMode = 'local', user
         </section>
 
         <section className="panel clients-panel">
-          <div className="clients-controls"><div className="search-box"><Icon name="search" /><input value={clientSearch} onChange={event => setClientSearch(event.target.value)} placeholder="Buscar cliente" aria-label="Buscar cliente" /></div><div className="segmented" aria-label="Filtrar clientes">{(['activos', 'archivados', 'todos'] as ClientFilter[]).map(filter => <button key={filter} className={clientFilter === filter ? 'active' : ''} onClick={() => setClientFilter(filter)}>{filter[0].toUpperCase() + filter.slice(1)}</button>)}</div></div>
+          <div className="clients-controls"><div className="search-box"><Icon name="search" /><input value={clientSearch} onChange={event => setClientSearch(event.target.value)} placeholder="Buscar cliente" aria-label="Buscar cliente" /></div><SlidingFilter label="Filtrar clientes" value={clientFilter} options={clientFilters} onChange={setClientFilter} /></div>
           {PLATFORMS.map(platform => <section className="platform-section" aria-label={`Clientes ${platformLabel(platform)}`} key={platform}><header className="platform-section-heading"><h3>{platformLabel(platform)}</h3></header><div className="client-list-header"><span>Cliente</span><span>Actividad</span><span>Estado</span><span>Acciones</span></div>
           {filteredClients.some(client => clientPlatforms(client).includes(platform) && (clientFilter === 'todos' || platformActive(client,platform) === (clientFilter === 'activos'))) ? <div className="client-management-list">{filteredClients.filter(client => clientPlatforms(client).includes(platform) && (clientFilter === 'todos' || platformActive(client,platform) === (clientFilter === 'activos'))).map(clientItem => {
-            const reviewCount = reviews.filter(item => item.clientId === clientItem.id && item.platform === platform).length
-            const pendingCount = db.pending.filter(item => item.clientId === clientItem.id && (!item.platform || item.platform === platform) && !item.resolved).length
+            const reviewCount = reviews.filter(item => item.clientId === clientItem.id && reviewService(item) === platform).length
+            const pendingCount = db.pending.filter(item => item.clientId === clientItem.id && (!item.platform && !item.service || (item.service ?? item.platform) === platform) && !item.resolved).length
             return <article key={clientItem.id} className="client-management-row">
-              <div className="client-identity"><span className="client-avatar large">{clientItem.name.slice(0, 2)}</span><div><strong>{clientItem.name}</strong>{clientItem.advertisingAccounts?.length ? clientItem.advertisingAccounts.filter(account => account.platform === platform).map(account => <small key={`${account.platform}:${account.accountId}`} className="account-binding"><span>{account.owner}</span><button type="button" title="Copiar ID de cuenta publicitaria" onClick={() => { navigator.clipboard.writeText(account.accountId).then(() => setNotice('ID de cuenta copiado')).catch(() => setError('No se pudo copiar el ID.')) }}>{account.platform === 'google_ads' ? 'Google Ads' : 'Meta'} · {formatAccountId(account)}</button></small>) : <small>Sin cuenta publicitaria vinculada</small>}</div></div>
+              <div className="client-identity"><span className="client-avatar large">{clientItem.name.slice(0, 2)}</span><div><strong>{clientItem.name}</strong>{platform === 'meta_organic' ? <small>Historias y feed · no requiere cuenta de pauta</small> : clientItem.advertisingAccounts?.some(account => account.platform === platform) ? clientItem.advertisingAccounts.filter(account => account.platform === platform).map(account => <small key={`${account.platform}:${account.accountId}`} className="account-binding"><span>{account.owner}</span><button type="button" title="Copiar ID de cuenta publicitaria" onClick={() => { navigator.clipboard.writeText(account.accountId).then(() => setNotice('ID de cuenta copiado')).catch(() => setError('No se pudo copiar el ID.')) }}>{account.platform === 'google_ads' ? 'Google Ads' : 'Meta'} · {formatAccountId(account)}</button></small>) : <small>Sin cuenta publicitaria vinculada</small>}</div></div>
               <div className="client-stats"><span><b>{reviewCount}</b> revisiones</span><span><b>{pendingCount}</b> pendientes</span></div>
               <span className={`state-pill ${platformActive(clientItem,platform) ? 'done' : 'archived'}`}>{platformActive(clientItem,platform) ? 'Activo' : 'Archivado'}</span>
               <div className="row-actions"><button className="icon-button" onClick={() => toggleClient(clientItem,platform)} title={platformActive(clientItem,platform) ? 'Archivar' : 'Reactivar'} aria-label={platformActive(clientItem,platform) ? `Archivar ${clientItem.name}` : `Reactivar ${clientItem.name}`}><Icon name="archive" /></button></div>
@@ -677,6 +711,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
         {reviewSignature(current) !== reviewSignature(formBase.current) ? <div className="draft-conflict" role="status">La revisión cambió. Conservamos tu borrador.<button type="button" onClick={reloadReview}>Cargar versión actual</button></div> : null}
         <div className="segmented review-platform-picker" aria-label="Plataforma de la revisión">{PLATFORMS.map(platform => <button type="button" key={platform} className={selected.platform === platform ? 'active' : ''} aria-pressed={selected.platform === platform} onClick={() => openReview(client && platformActive(client,platform) ? client.id : '',selected.day,'modal',false,platform)}>{platformLabel(platform)}</button>)}</div>
         <ClientPicker clients={active.filter(client => platformActive(client,selected.platform))} value={selected.id} onChange={id => openReview(id, selected.day)} />
+        <ReviewIssues value={issues} onChange={setIssues} organic={selected.platform === 'meta_organic'} />
         <QuickActions lockedPlatform={selected.platform} clientId={selected?.id} catalog={db.customActions} onCreate={createAction} value={actionEntries} onChange={setActionEntries} storageKey={`fng-action-prefs:${userId ?? 'local'}`} />
         <ReviewDetailsFields actions={actions} observations={observations} pendingText={pendingText} onActions={setActions} onObservations={setObservations} onPending={setPendingText} onAddPending={addPending} />
         </div>
