@@ -3,11 +3,11 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { date, format, type Store, weekDays } from '../data'
 import { sortClients } from '../clients'
 import { monthBounds } from '../sync/records'
-import { compactReviewText, paginateDetail, type DetailBlock, type DetailPage } from '../report-layout'
+import { paginateDetail, reviewDetailItems, type DetailBlock, type DetailPage } from '../report-layout'
 import { serviceLabel } from '../work-services'
 
 function ClientBlock({ block }: { block: DetailBlock }) {
-  return <section className="detail-client" data-detail-block={block.id}><h2>{block.title}{block.continued ? <small> · continuación</small> : null}</h2>{block.items.map(item => <article key={item.id} data-detail-item={item.id}>{item.date ? <b className="detail-date">{item.date}{item.continued ? <small>cont.</small> : null}</b> : null}<p>{item.text}</p></article>)}</section>
+  return <section className="detail-client" data-detail-block={block.id}><h2>{block.title}{block.continued ? <small> · continuación</small> : null}</h2>{block.items.map(item => <article key={item.id} data-detail-item={item.id} className={item.kind && item.kind !== 'work' ? `is-${item.kind}` : undefined}>{item.date ? <b className="detail-date">{item.date}{item.continued ? <small>cont.</small> : null}</b> : item.kind === 'note' || item.kind === 'comment' ? <b className="detail-date" /> : null}<p>{item.kind === 'note' ? <b className="detail-kicker">Nota</b> : item.kind === 'comment' ? <b className="detail-kicker">Observación</b> : null}{item.kind === 'note' || item.kind === 'comment' ? ' ' : null}<span className="detail-text">{item.text}</span></p></article>)}</section>
 }
 
 export default function DetailedNotebookReport({ store, week, month, title, preview = false }: { store: Store; week: string; month?: string; title: string; preview?: boolean }) {
@@ -26,7 +26,7 @@ export default function DetailedNotebookReport({ store, week, month, title, prev
     const weekDates = weekDays(week)
     const result = sortClients(store.clients).flatMap(client => {
       const reviews = store.reviews.filter(review => review.clientId === client.id && (range ? review.date >= range.start && review.date < range.end : weekDates.includes(review.date))).sort((a, b) => a.date.localeCompare(b.date))
-      return reviews.length ? [{ id: client.id, title: client.name, items: reviews.map(review => ({ id: review.id, date: `${review.date.slice(8, 10)}/${review.date.slice(5, 7)}`, text: compactReviewText(review) })) }] : []
+      return reviews.length ? [{ id: client.id, title: client.name, items: reviews.flatMap(review => reviewDetailItems(review)) }] : []
     })
     const pending = store.pending.filter(item => !item.resolved)
     if (pending.length) result.push({ id: '__pending', title: 'Pendientes abiertos', items: pending.map(item => ({ id: item.id, date: '', text: `${store.clients.find(client => client.id === item.clientId)?.name ?? 'Cliente archivado'} · ${item.service || item.platform ? `${serviceLabel(item.service ?? item.platform!)} · ` : ''}${item.text}` })) })
@@ -56,7 +56,8 @@ export default function DetailedNotebookReport({ store, week, month, title, prev
           const originalId = item.id.replace(/:part:\d+$/, '')
           const original = source.querySelector<HTMLElement>(`[data-detail-item="${CSS.escape(originalId)}"]`)!
           const article = original.cloneNode(true) as HTMLElement
-          article.querySelector('p')!.textContent = item.text
+          const textNode = article.querySelector('.detail-text') ?? article.querySelector('p')
+          textNode!.textContent = item.text
           if (item.continued && item.date) { const label = document.createElement('small'); label.textContent = 'cont.'; article.querySelector('b')!.append(label) }
           section.append(article)
         }
