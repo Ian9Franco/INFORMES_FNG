@@ -1,51 +1,91 @@
 import type { Review } from './data'
-import { entryDefinition, entryService, isScheduledAction, STORY_DAYS, validReviewActions } from './review-actions.ts'
-import { WORK_SERVICES, type WorkService } from './work-services.ts'
+import { entryDefinition, entryService, isScheduledAction, STORY_DAYS, validReviewActions, type ReviewAction } from './review-actions.ts'
+import { serviceLabel, WORK_SERVICES, type WorkService } from './work-services.ts'
 
-const codes: Record<string,string> = {
-  'meta.ad.created':'An+', 'meta.ad.deleted':'An−', 'meta.ad.updated':'An↻', 'meta.ad.paused':'Pausa',
-  'meta.campaign.created':'Camp', 'meta.adset.created':'Conj', 'meta.budget.updated':'Pres', 'meta.audience.updated':'Aud',
-  'meta.story.scheduled':'H', 'meta.post.scheduled':'Feed',
-  'google.ad.created':'An+', 'google.ad.deleted':'An−', 'google.ad.updated':'An↻', 'google.campaign.created':'Camp',
-  'google.adgroup.created':'Grupo', 'google.keyword.updated':'KW', 'google.keyword.negative_added':'KW−',
-  'google.youtube.video_uploaded':'YT', 'google.asset_group.updated':'Rec', 'google.budget.updated':'Pres', 'google.bidding.updated':'Puja',
+/** Reader-facing phrases. The person who opens the report did not write it. */
+const READER_PHRASES: Record<string, readonly [string, string]> = {
+  'meta.ad.created': ['anuncio añadido', 'anuncios añadidos'],
+  'meta.ad.deleted': ['anuncio eliminado', 'anuncios eliminados'],
+  'meta.ad.updated': ['anuncio actualizado', 'anuncios actualizados'],
+  'meta.ad.paused': ['anuncio pausado', 'anuncios pausados'],
+  'meta.campaign.created': ['campaña creada', 'campañas creadas'],
+  'meta.adset.created': ['conjunto de anuncios creado', 'conjuntos de anuncios creados'],
+  'meta.budget.updated': ['presupuesto ajustado', 'presupuestos ajustados'],
+  'meta.audience.updated': ['audiencia actualizada', 'audiencias actualizadas'],
+  'google.ad.created': ['anuncio añadido', 'anuncios añadidos'],
+  'google.ad.deleted': ['anuncio eliminado', 'anuncios eliminados'],
+  'google.ad.updated': ['anuncio actualizado', 'anuncios actualizados'],
+  'google.campaign.created': ['campaña creada', 'campañas creadas'],
+  'google.adgroup.created': ['grupo de anuncios creado', 'grupos de anuncios creados'],
+  'google.keyword.updated': ['palabra clave actualizada', 'palabras clave actualizadas'],
+  'google.keyword.negative_added': ['palabra clave negativa añadida', 'palabras clave negativas añadidas'],
+  'google.youtube.video_uploaded': ['video subido a YouTube', 'videos subidos a YouTube'],
+  'google.asset_group.updated': ['grupo de recursos actualizado', 'grupos de recursos actualizados'],
+  'google.budget.updated': ['presupuesto ajustado', 'presupuestos ajustados'],
+  'google.bidding.updated': ['puja actualizada', 'pujas actualizadas'],
 }
-export const serviceCode = (service: WorkService) => service === 'meta_organic' ? 'MO' : service === 'google_ads' ? 'G' : 'MA'
-export function simpleActionSummary(reviews: Review[], compact = false): string[] {
+
+export function readerActionText(entry: ReviewAction, registeredDate?: string): string {
+  const pending = entry.evidence === 'observed' ? ' · por confirmar' : ''
+  if (isScheduledAction(entry.typeId)) {
+    const days = STORY_DAYS.filter(day => entry.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')
+    const noun = entry.typeId === 'meta.story.scheduled'
+      ? entry.quantity === 1 ? 'historia programada' : 'historias programadas'
+      : entry.quantity === 1 ? 'publicación programada' : 'publicaciones programadas'
+    const when = registeredDate ? ` (anotado el ${registeredDate.split('-').reverse().join('/')})` : ''
+    return `${entry.quantity} ${noun} para ${days}${when}${pending}`
+  }
+  const pair = READER_PHRASES[entry.typeId]
+  const phrase = pair
+    ? `${entry.quantity} ${entry.quantity === 1 ? pair[0] : pair[1]}`
+    : `${entry.quantity} · ${entryDefinition(entry)?.label ?? 'Trabajo registrado'}`
+  return `${phrase}${pending}`
+}
+
+export type ReportActionTag = { key: string; text: string; pending: boolean }
+export type ReportActionGroup = { service: WorkService; tags: ReportActionTag[] }
+
+export function reportActionGroups(reviews: Review[]): ReportActionGroup[] {
   return WORK_SERVICES.flatMap(service => {
-    const entries=reviews.flatMap(review => validReviewActions(review.actionEntries) ? review.actionEntries.map(entry => ({ entry, date: review.date })) : []).filter(({entry}) => entryService(entry) === service)
-    const groups=new Map<string,typeof entries>()
-    for(const item of entries) {
-      // Keep the registration date of each programming event, especially in monthly reports.
-      const key=isScheduledAction(item.entry.typeId) ? `${item.entry.typeId}:${item.date}` : item.entry.typeId
-      groups.set(key,[...(groups.get(key)??[]),item])
+    const entries = reviews.flatMap(review => validReviewActions(review.actionEntries) ? review.actionEntries.map(entry => ({ entry, date: review.date })) : []).filter(({ entry }) => entryService(entry) === service)
+    const groups = new Map<string, typeof entries>()
+    for (const item of entries) {
+      const key = isScheduledAction(item.entry.typeId) ? `${item.entry.typeId}:${item.date}` : item.entry.typeId
+      groups.set(key, [...(groups.get(key) ?? []), item])
     }
-    const parts=[...groups.values()].map(items => {
-      const type=items[0].entry.typeId
-      const quantity=items.reduce((sum,item) => sum+item.entry.quantity,0)
-      const observed=items.some(item => item.entry.evidence==='observed') ? '?' : ''
-      if(isScheduledAction(type)) {
-        const days=STORY_DAYS.filter(day => items.some(item => item.entry.scheduledDays?.includes(day.id))).map(day => day.label).join(', ')
-        const noun=type==='meta.story.scheduled' ? quantity===1?'historia programada':'historias programadas' : quantity===1?'publicación programada':'publicaciones programadas'
-        const registered=items[0].date.split('-').reverse().join('/')
-        return `${quantity} ${noun} para ${days} (registro ${registered})${observed ? ' · por confirmar' : ''}`
+    const tags = [...groups.entries()].map(([key, items]) => {
+      const quantity = items.reduce((sum, item) => sum + item.entry.quantity, 0)
+      const pending = items.some(item => item.entry.evidence === 'observed')
+      const sample: ReviewAction = {
+        ...items[0].entry,
+        quantity,
+        evidence: pending ? 'observed' : 'user_confirmed',
+        ...(isScheduledAction(items[0].entry.typeId) ? { scheduledDays: STORY_DAYS.filter(day => items.some(item => item.entry.scheduledDays?.includes(day.id))).map(day => day.id) } : {}),
       }
-      return `${codes[type] ?? entryDefinition(items[0].entry)!.label}${compact ? '' : ' ×'}${quantity}${observed}`
+      return { key, text: readerActionText(sample, isScheduledAction(sample.typeId) ? items[0].date : undefined), pending }
     })
-    return parts.length ? [`${serviceCode(service)}${compact ? ' ' : ' · '}${parts.join(compact ? ' ' : ' · ')}`] : []
+    return tags.length ? [{ service, tags }] : []
   })
 }
+
+export function simpleActionSummary(reviews: Review[], _compact = false): string[] {
+  return reportActionGroups(reviews).map(group => `${serviceLabel(group.service)} · ${group.tags.map(tag => tag.text).join(' · ')}`)
+}
+
+export type ReportRemark = { kind: 'note' | 'comment'; date: string; text: string }
+export function reportRemarks(reviews: Review[]): ReportRemark[] {
+  return reviews.flatMap(review => {
+    const remarks: ReportRemark[] = []
+    if (review.actions.trim()) remarks.push({ kind: 'note', date: review.date, text: review.actions.trim() })
+    if (review.observations.trim()) remarks.push({ kind: 'comment', date: review.date, text: review.observations.trim() })
+    return remarks
+  }).sort((a, b) => a.date.localeCompare(b.date) || (a.kind === b.kind ? a.text.localeCompare(b.text, 'es') : a.kind === 'note' ? -1 : 1))
+}
+
 export function simpleActionLegend(reviews: Review[]): string {
-  const labels=new Map<string,string>()
-  for(const review of reviews) for(const entry of validReviewActions(review.actionEntries) ? review.actionEntries : []) {
-    const code=codes[entry.typeId]
-    if(code && !isScheduledAction(entry.typeId)) labels.set(code,entryDefinition(entry)!.label)
-  }
   return [
-    'MA: Meta Ads · G: Google Ads · MO: Meta orgánico.',
-    labels.size ? [...labels].map(([code,label]) => `${code}: ${label}`).join(' · ') : '',
-    'Número = cantidad (An+2 = 2 anuncios añadidos). (Sáb/Dom) = días programados. ✓: revisado / !: con incidencia / ?: por confirmar / ·: sin revisar.',
-    reviews.some(review => review.issues?.some(issue => issue.type === 'client_paused')) ? 'P: campañas apagadas por decisión del cliente (no es un error).' : '',
-    reviews.some(review => review.actionEntries?.some(entry => isScheduledAction(entry.typeId))) ? 'Programado ≠ publicado. «Para» indica el día previsto; «registro», cuándo se anotó.' : '',
+    'Cómo se lee: cada etiqueta dice qué se hizo y cuántas veces. Meta Ads, Google Ads y Meta orgánico se leen por separado. ✓ revisado ese día · ! hubo una incidencia · ? el dato todavía no está confirmado · · ese día no se revisó.',
+    reviews.some(review => review.issues?.some(issue => issue.type === 'client_paused')) ? 'P: las campañas están apagadas porque el cliente lo pidió. No es un error.' : '',
+    reviews.some(review => review.actionEntries?.some(entry => isScheduledAction(entry.typeId))) ? 'Programar no es publicar. «Para» es el día previsto; «anotado», cuándo se registró.' : '',
   ].filter(Boolean).join('\n')
 }

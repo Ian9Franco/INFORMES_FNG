@@ -28,18 +28,34 @@
   @media (prefers-reduced-motion: reduce) { .issue-options button { transition: none; scale: 1; } }
 }
 /* Print/export uses explicit ink, never a color-only warning. */
-.notebook-report .report-issue { display: block; color: #714410; font-size: 7pt; line-height: 1.25; margin-top: 1mm; font-weight: 600; overflow-wrap: anywhere; }
+.notebook-report .report-issue { display: block; color: #714410; font-size: 8pt; line-height: 1.3; margin-top: 1mm; font-weight: 650; overflow-wrap: anywhere; }
 .notebook-report .report-issue.is-client-paused { color: #38566a; }
-.notebook-report .simple-action-line { display: block; color: #263b31; font-size: 7pt; line-height: 1.25; margin-top: .7mm; overflow-wrap: anywhere; }
-.notebook-report .simple-action-legend { color: #3e4b40; font-size: 7pt; line-height: 1.35; margin: 0 0 .7mm; padding-bottom: .7mm; border-bottom: 1px solid #dedfd6; text-align: left; }
-.notebook-report .simple-action-legend strong { color: #263b31; }
-.report-grid.is-weekly td:first-child, .report-grid.is-weekly th:first-child { width: 22%; }
-.report-grid.is-weekly td:last-child, .report-grid.is-weekly th:last-child { width: 48%; }
+.notebook-report .simple-action-legend { color: #243028; font-size: 7.5pt; line-height: 1.3; margin: 0 0 .7mm; padding: 0 0 .7mm; border-bottom: 1px solid #dedfd6; text-align: left; }
+.notebook-report .simple-action-legend strong { color: #173024; font-weight: 700; }
+.notebook-report .report-service-group { display: block; margin: 0; line-height: 1.2; }
+.notebook-report .report-service-tag, .notebook-report .report-action-tag, .notebook-report .report-remark b { box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.notebook-report .report-service-tag, .notebook-report .report-action-tag { display: inline; padding: 0 .55mm; border-radius: .6mm; }
+.notebook-report .report-service-tag { font-size: 7.5pt; font-weight: 700; letter-spacing: .03em; margin-right: .7mm; }
+.notebook-report .report-service-tag.is-meta_ads { background: #d7ead8; color: #143726; }
+.notebook-report .report-service-tag.is-google_ads { background: #d5e5f6; color: #143454; }
+.notebook-report .report-service-tag.is-meta_organic { background: #f4e4c8; color: #5a3c0c; }
+.notebook-report .report-action-tag { background: #eef3ea; color: #1b2a22; font-weight: 650; margin-right: .55mm; }
+.notebook-report .report-action-tag.is-pending { background: #fff1c9; color: #5c4308; }
+.notebook-report .report-remark { display: block; margin-top: .7mm; padding: .55mm 1.2mm .55mm 1.5mm; border-radius: 1mm; font-size: 8pt; line-height: 1.35; text-align: left; overflow-wrap: anywhere; }
+.notebook-report .report-remark b { display: inline-block; margin-right: .8mm; padding: 0 .8mm; border-radius: .6mm; font-size: 7.5pt; letter-spacing: .01em; }
+.notebook-report .report-remark.is-note { background: #f8edd4; color: #4e390c; box-shadow: inset 1.15mm 0 0 #c4922e; }
+.notebook-report .report-remark.is-note b { background: #efd7a2; color: #5c3e08; }
+.notebook-report .report-remark.is-comment { background: #e5f1f8; color: #16384f; box-shadow: inset 1.15mm 0 0 #2d6f95; }
+.notebook-report .report-remark.is-comment b { background: #c5dff0; color: #14384f; }
+.report-grid.is-weekly td:first-child, .report-grid.is-weekly th:first-child { width: 16%; }
+.report-grid.is-weekly td:last-child, .report-grid.is-weekly th:last-child { width: 54%; }
 .report-grid.is-weekly th:not(:first-child):not(:last-child) { font-size: 7.5pt; padding-inline: .2mm; }
 .report-grid.is-monthly td:first-child, .report-grid.is-monthly th:first-child { width: 23%; }
 .report-grid.is-monthly td:nth-child(2), .report-grid.is-monthly th:nth-child(2) { width: 10%; }
 .report-grid.is-monthly td:nth-child(3), .report-grid.is-monthly th:nth-child(3) { width: 52%; }
 .report-grid.is-monthly td:last-child, .report-grid.is-monthly th:last-child { width: 15%; }
-.notebook-report.report-grid td { padding-block: .5mm; }
-.notebook-report.report-grid .simple-period-actions { text-align: left; color: #263b31; font-size: 8.5pt; font-weight: 400; line-height: 1.2; }
-.notebook-report.report-grid .simple-period-actions .report-issue, .notebook-report.report-grid .simple-period-actions .simple-action-line { display: inline; margin-left: 1mm; font-size: 8pt; }
+.notebook-report.report-grid { gap: 3.5mm; }
+.notebook-report.report-grid > header { padding-bottom: 2.5mm; }
+.notebook-report.report-grid td { padding-block: .28mm; }
+.notebook-report.report-grid .simple-period-actions { text-align: left; color: #1c2b22; font-size: 7.75pt; font-weight: 500; line-height: 1.2; }
+.notebook-report.report-grid .simple-period-actions .report-issue { display: block; margin: .45mm 0 0; font-size: 8pt; }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { compactReviewText, paginateDetail } from '../src/report-layout.ts'
+import { compactReviewText, paginateDetail, reviewDetailItems } from '../src/report-layout.ts'
 
 const review = { id:'r',clientId:'a',date:'2026-10-15',createdAt:'2026-10-15T12:00:00Z',actions:'',observations:'' }
 const item=(id,text='Registro')=>({id,date:'15/10',text})
@@ -9,12 +9,17 @@ const measure=block=>10+block.items.reduce((sum,item)=>sum+10+item.text.length,0
 
 test('compact detail preserves actions, observations, weekdays and observed evidence without empty labels',()=>{
   assert.equal(compactReviewText(review),'Revisado sin cambios')
-  const text=compactReviewText({...review,actions:'Detalle anterior',observations:'Nota importante',actionEntries:[{id:'a',typeId:'meta.ad.created',quantity:3,source:'manual',evidence:'user_confirmed'},{id:'s',typeId:'meta.post.scheduled',quantity:1,source:'companion',sourceEventId:'source',evidence:'observed',scheduledDays:['fri','mon']}]})
+  const rich={...review,actions:'Detalle anterior',observations:'Nota importante',actionEntries:[{id:'a',typeId:'meta.ad.created',quantity:3,source:'manual',evidence:'user_confirmed'},{id:'s',typeId:'meta.post.scheduled',quantity:1,source:'companion',sourceEventId:'source',evidence:'observed',scheduledDays:['fri','mon']}]}
+  const text=compactReviewText(rich)
   assert.equal(text.match(/Meta Ads ·/g).length,1)
-  assert.match(text,/Meta Ads · Añadí anuncios: 3/)
-  assert.match(text,/Meta orgánico · Programé publicación: 1 \(para lunes, viernes\) \(por confirmar\)/)
-  assert.match(text,/Detalle anterior\nObservaciones · Nota importante/)
+  assert.match(text,/Meta Ads · 3 anuncios añadidos/)
+  assert.match(text,/Meta orgánico · 1 publicación programada para lunes, viernes · por confirmar/)
+  assert.match(text,/Nota · Detalle anterior\nObservación · Nota importante/)
   assert.doesNotMatch(text,/Sin observaciones/)
+  const parts=reviewDetailItems(rich)
+  assert.deepEqual(parts.map(item=>item.kind),['work','note','comment'])
+  assert.equal(parts[1].text,'Detalle anterior')
+  assert.equal(parts[1].date,undefined,'The date stays on the work block so the note reads as its own remark')
 })
 
 test('physical pagination uses both columns, keeps short clients together and balances the final sheet',()=>{

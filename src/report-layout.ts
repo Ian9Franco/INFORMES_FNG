@@ -1,27 +1,35 @@
 import type { Review } from './data'
-import { entryDefinition, entryService, isScheduledAction, STORY_DAYS, validReviewActions } from './review-actions.ts'
+import { entryService, validReviewActions } from './review-actions.ts'
 import { reviewIssueText, reviewConditionTone } from './review-issues.ts'
+import { readerActionText } from './simple-report.ts'
 import { WORK_SERVICES, reviewService, serviceLabel } from './work-services.ts'
 
-export type DetailItem = { id: string; date?: string; text: string; continued?: boolean }
+export type DetailKind = 'work' | 'note' | 'comment'
+export type DetailItem = { id: string; date?: string; text: string; kind?: DetailKind; continued?: boolean }
 export type DetailBlock = { id: string; title: string; items: DetailItem[]; continued?: boolean }
 export type DetailPage = { columns: [DetailBlock[], DetailBlock[]] }
 
-/** Keep all recorded information; only remove empty labels and repeated platform prefixes. */
-export function compactReviewText(review: Review): string {
+/** One visual block per kind of information, so notes never look like completed work. */
+export function reviewDetailItems(review: Review): DetailItem[] {
+  const date = `${review.date.slice(8, 10)}/${review.date.slice(5, 7)}`
   const entries = validReviewActions(review.actionEntries) ? review.actionEntries : []
   const lines = WORK_SERVICES.map(platform => {
-    const actions = entries.filter(entry => entryService(entry) === platform).map(entry => {
-      const days = isScheduledAction(entry.typeId) ? ` (para ${STORY_DAYS.filter(day => entry.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')})` : ''
-      return `${entryDefinition(entry)!.label}: ${entry.quantity}${days}${entry.evidence === 'observed' ? ' (por confirmar)' : ''}`
-    })
-    return actions.length ? `${serviceLabel(platform)} · ${actions.join('; ')}` : ''
+    const actions = entries.filter(entry => entryService(entry) === platform).map(entry => readerActionText(entry))
+    return actions.length ? `${serviceLabel(platform)} · ${actions.join(' · ')}` : ''
   }).filter(Boolean)
   const issue = reviewIssueText(review)
   if (issue) lines.unshift(`${serviceLabel(reviewService(review))} · ${reviewConditionTone(review) === 'paused' ? 'Revisado ·' : 'Revisado con incidencia:'} ${issue}`)
-  if (review.actions.trim()) lines.push(review.actions.trim())
-  if (review.observations.trim()) lines.push(`Observaciones · ${review.observations.trim()}`)
-  return lines.join('\n') || `${review.service || review.platform ? `${serviceLabel(reviewService(review))} · ` : ''}Revisado sin cambios`
+  const items: DetailItem[] = []
+  if (lines.length) items.push({ id: review.id, date, text: lines.join('\n'), kind: 'work' })
+  if (review.actions.trim()) items.push({ id: `${review.id}:note`, date: items.length ? undefined : date, text: review.actions.trim(), kind: 'note' })
+  if (review.observations.trim()) items.push({ id: `${review.id}:comment`, date: items.length ? undefined : date, text: review.observations.trim(), kind: 'comment' })
+  if (!items.length) items.push({ id: review.id, date, text: `${review.service || review.platform ? `${serviceLabel(reviewService(review))} · ` : ''}Revisado sin cambios`, kind: 'work' })
+  return items
+}
+
+/** Keep all recorded information; only remove empty labels and repeated platform prefixes. */
+export function compactReviewText(review: Review): string {
+  return reviewDetailItems(review).map(item => item.kind === 'note' ? `Nota · ${item.text}` : item.kind === 'comment' ? `Observación · ${item.text}` : item.text).join('\n')
 }
 
 /** Measured physical pagination: never scale type or drop overflow. */
