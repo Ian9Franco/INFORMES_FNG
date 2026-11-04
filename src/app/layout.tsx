@@ -13,6 +13,7 @@ import '../report-polish.css'
 import '../materials.css'
 import '../filters-and-tasks.css'
 import '../review-issues.css'
+import '../day-close.css'
 import '../sync-resolution.css'
 export const metadata: Metadata = {
   title: 'Informes FNG',

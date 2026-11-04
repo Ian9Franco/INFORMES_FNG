@@ -5,6 +5,7 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — mejoras continuas
 
 ### Interfaz operativa
+- Mi jornada separa Meta Ads, Google Ads y Meta orgánico con color propio. «Guardar informes» queda visible y se activa al completar las revisiones obligatorias de Meta Ads. Al terminarlas hay una celebración, con la opción de guardar el simple y el detallado en un solo PDF o de seguir con lo opcional.
 - Informes en lenguaje llano para quien no cargó los datos: cada etiqueta dice el trabajo y la cantidad (por ejemplo, «2 anuncios añadidos», «3 palabras clave actualizadas»), con color distinto para Meta Ads, Google Ads y Meta orgánico. Las notas y las observaciones salen en bloques propios, con rótulo, y ya no se esconden detrás de «Notas en el detallado».
 - Historias: se anota cuántas van a cada día («5 historias: 3 para sábado y 2 para domingo») y el informe separa el día en que se programaron del día en que salen. Los registros viejos, sin ese reparto, siguen mostrando el total. Al crear un anuncio, conjunto o campaña se puede cargar una fecha de fin opcional, para un feriado o un evento del cliente.
 - Tablas separadas Meta Ads / Google Ads en Jornada, Semana y Clientes; archivo/reactivación, revisiones, cantidades y borradores independientes por plataforma. Informe unificado por cliente que excluye sólo la plataforma archivada.

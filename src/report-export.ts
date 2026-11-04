@@ -10,7 +10,8 @@ export function activeReportStore(store: Store): Store {
 }
 
 /** One basename for both native PDF printing and PNG, independent of the visible app title. */
-export function reportFileName(title: string, period: 'week' | 'month', date: string, mode: 'grilla' | 'detalle'): string {
+export function reportFileName(title: string, period: 'week' | 'month', date: string, mode: 'grilla' | 'detalle' | 'ambos'): string {
   const safeTitle = title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/, '').trim() || 'Informe Ian'
-  return `${safeTitle} - ${period === 'month' ? 'mensual' : 'semanal'} ${date} - ${mode === 'grilla' ? 'simple' : 'detallado'}`
+  const format = mode === 'ambos' ? 'simple y detallado' : mode === 'grilla' ? 'simple' : 'detallado'
+  return `${safeTitle} - ${period === 'month' ? 'mensual' : 'semanal'} ${date} - ${format}`
 }

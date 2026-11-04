@@ -4,7 +4,7 @@ import { activePlatforms, platformActive, scopedReviews, togglePlatform } from '
 import { latestIssues, validReviewIssues, issueCellText, reviewConditionTone, conditionMark } from '../src/review-issues.ts'
 import { simpleActionSummary, simpleActionLegend, reportRemarks } from '../src/simple-report.ts'
 import { compactReviewText } from '../src/report-layout.ts'
-import { dailyRequired, weeklyServiceProgress } from '../src/service-cadence.ts'
+import { dailyRequired, mandatoryDayReady, weeklyServiceProgress } from '../src/service-cadence.ts'
 import { activeReportStore } from '../src/report-export.ts'
 import { readDrafts, draftChanged } from '../src/review-workflow.ts'
 import { diffStore, storeRecords, rowsStore } from '../src/sync/records.ts'
@@ -64,6 +64,9 @@ test('issues validate, carry across month/browser boundaries and explicit cleari
 test('daily obligations are only weekday Meta Ads; flexible Google and organic track weekly work, not fixed dates',()=>{
   assert.equal(dailyRequired('meta_ads','2026-10-16'),true)
   assert.equal(dailyRequired('meta_ads','2026-10-17'),false)
+  assert.equal(mandatoryDayReady(4,4),true)
+  assert.equal(mandatoryDayReady(4,3),false)
+  assert.equal(mandatoryDayReady(0,0),true,'A day without obligatory reviews can already save the report')
   assert.equal(dailyRequired('google_ads','2026-10-16'),false)
   assert.equal(dailyRequired('meta_organic','2026-10-16'),false)
   const google=[review('google_ads',{id:'g1',date:'2026-10-12'}),review('google_ads',{id:'g2',date:'2026-10-15'})]
