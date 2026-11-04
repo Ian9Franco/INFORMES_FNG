@@ -5,6 +5,7 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 ## [Unreleased] — mejoras continuas
 
 ### Interfaz operativa
+- Al terminar un mes, si cada semana tiene su PDF simple y detallado en la carpeta, se puede crear el resumen mensual y después borrar esas semanas. Quedan un simple y un detallado por mes. La carpeta inicial es `\\Barton-8000\fanger\Users\IanP\informes` y se puede cambiar.
 - Encabezado de los informes en Inter, con el título y la fecha en peso medio y la guía de lectura en redonda. La negrita queda para «Cómo se lee» y para el nombre de cada plataforma. El período se escribe «2 al 7 de noviembre de 2026».
 - Mi jornada separa Meta Ads, Google Ads y Meta orgánico con color propio. «Guardar informes» queda visible y se activa al completar las revisiones obligatorias de Meta Ads. Al terminarlas hay una celebración, con la opción de guardar el simple y el detallado en un solo PDF o de seguir con lo opcional.
 - Informes en lenguaje llano para quien no cargó los datos: cada etiqueta dice el trabajo y la cantidad (por ejemplo, «2 anuncios añadidos», «3 palabras clave actualizadas»), con color distinto para Meta Ads, Google Ads y Meta orgánico. Las notas y las observaciones salen en bloques propios, con rótulo, y ya no se esconden detrás de «Notas en el detallado».

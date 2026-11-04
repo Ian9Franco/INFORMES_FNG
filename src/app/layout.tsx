@@ -15,6 +15,7 @@ import '../filters-and-tasks.css'
 import '../review-issues.css'
 import '../day-close.css'
 import '../sync-resolution.css'
+import '../report-archive.css'
 export const metadata: Metadata = {
   title: 'Informes FNG',
   description: 'Seguimiento de clientes, revisiones, pendientes e informes publicitarios',

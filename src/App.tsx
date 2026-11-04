@@ -14,6 +14,8 @@ import ClientPicker from './components/ClientPicker'
 import NotebookReport from './components/NotebookReport'
 import ReportPreview from './components/ReportPreview'
 import { activeReportStore, reportFileName } from './report-export'
+import { captureReportPngs, pdfFromPngs } from './report-pdf'
+import ReportArchivePanel from './components/ReportArchivePanel'
 import { formatAccountId } from './account-catalog'
 import { sortClients, withManagedClients } from './clients'
 import { ExternalLink } from 'lucide-react'
@@ -143,6 +145,8 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const [showActivity, setShowActivity] = useState(false)
   const [closingReview, setClosingReview] = useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const printHost = useRef<HTMLDivElement>(null)
+  const [capture, setCapture] = useState<null | { period: 'week' | 'month'; id: string; mode: PrintMode }>(null)
   const saveBarRef = useRef<HTMLDivElement>(null)
   const rowScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scrollPositions = useRef<Partial<Record<Tab, number>>>({})
@@ -512,6 +516,24 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     } finally { setExportingImage(false) }
   }
 
+  async function buildPdf(period: 'week' | 'month', id: string, mode: PrintMode) {
+    const token = `${period}:${id}:${mode}`
+    setCapture({ period, id, mode })
+    try {
+      await document.fonts.ready
+      const start = performance.now()
+      while (performance.now() - start < 5000) {
+        const host = printHost.current
+        const shown = host?.dataset.capture === token
+        const ready = mode === 'detalle' ? host?.querySelector('[data-layout-ready="true"]') : host?.querySelector('.report-grid')
+        if (shown && ready) break
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      }
+      if (printHost.current?.dataset.capture !== token) throw new Error('No se pudo armar el informe.')
+      return pdfFromPngs(await captureReportPngs(printHost.current))
+    } finally { setCapture(null) }
+  }
+
   function printReport(fileMode: PrintMode | 'ambos' = printMode) {
     restorePrintTitle.current?.()
     const previous = document.title
@@ -730,6 +752,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
           <div className="report-summary"><div><span>Revisiones</span><strong>{reportReviews.length}</strong></div><div><span>Clientes cubiertos</span><strong>{new Set(reportReviews.map(item => item.clientId)).size}</strong></div><div><span>Pendientes</span><strong>{reportPending.length}</strong></div></div>
           <div className="report-downloads"><button className="primary-button print-button" onClick={() => printReport()}><Icon name="print" />Imprimir o guardar PDF</button><button className="secondary-button" onClick={downloadPng} disabled={exportingImage}><Icon name="download" />{exportingImage ? 'Preparando imagen…' : 'Descargar PNG'}</button></div>
           <p className="helper-text">El navegador abrirá el diálogo de impresión. Elegí “Guardar como PDF” para generar el archivo.</p>
+          <ReportArchivePanel title={documentTitle} today={today} week={week} confirm={confirm} buildPdf={buildPdf} />
           {onSync ? <div className="report-sync"><button className="secondary-button" disabled={syncingReport} onClick={async () => { setSyncingReport(true); try { await onSync(); setNotice('Estado sincronizado con la DB. Disponible en tus otros navegadores.'); } catch (error) { setError(error instanceof Error ? error.message : 'No se pudo sincronizar. Los pendientes siguen en este dispositivo.'); } finally { setSyncingReport(false) } }}><Icon name="check" />{syncingReport ? 'Sincronizando…' : 'Sincronizar con DB'}</button><p>Guardado automático por registro. Envía pendientes y recupera cambios; no guarda otra copia del informe.</p></div> : null}
         </section>
 
@@ -757,6 +780,6 @@ export default function App({ initialData, onChange, storageMode = 'local', user
         <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : null}<div><button className="secondary-button" onClick={() => closeReview()}>Salir</button><button className="primary-button save-button" disabled={!client || closingReview} onClick={() => saveReview()}><Icon name="check" />Guardar revisión</button><button className="secondary-button save-next-button" disabled={!client || closingReview} onClick={() => saveReview(true)}>Guardar y siguiente</button></div></footer>
     </dialog> : null}
 
-    <div className="print-report-host">{printBundle === 'both' ? <><NotebookReport store={reportStore} week={week} mode="grilla" title={documentTitle} /><NotebookReport store={reportStore} week={week} mode="detalle" title={documentTitle} /></> : <NotebookReport store={reportStore} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} />}</div>
+    <div ref={printHost} className="print-report-host" data-capture={capture ? `${capture.period}:${capture.id}:${capture.mode}` : 'screen'}>{capture ? <NotebookReport store={reportStore} week={capture.period === 'week' ? capture.id : week} month={capture.period === 'month' ? capture.id : undefined} mode={capture.mode} title={documentTitle} /> : printBundle === 'both' ? <><NotebookReport store={reportStore} week={week} mode="grilla" title={documentTitle} /><NotebookReport store={reportStore} week={week} mode="detalle" title={documentTitle} /></> : <NotebookReport store={reportStore} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} />}</div>
   </div></MotionConfig>
 }
