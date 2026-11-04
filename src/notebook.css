@@ -175,26 +175,26 @@
   .report-fit-note { font-size: 11px; line-height: 1.5; }
 }
 /* Shared screen/print document styles. Sizes are physical, never viewport dependent. */
-.notebook-report { width: 210mm; height: 297mm; display: flex; flex-direction: column; gap: 5mm; padding: 10mm; background: #fff; color: #202820; font-family: Arial,sans-serif; font-size: 11pt; line-height: 1.3; color-scheme: light; }
-.notebook-report > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; flex: none; padding: 3mm 0 4mm; border-bottom: 1.5px solid #384939; }
-.notebook-report .report-overline { font-size: 7pt; letter-spacing: .13em; color: #657360; }
-.notebook-report h1 { font-family: Georgia,serif; font-weight: 500; font-size: 25pt; line-height: 1.1; margin: 2mm 0 1mm; overflow-wrap: anywhere; }
-.notebook-report > header p { font-size: 9pt; margin: 0; color: #64705f; }
-.notebook-report > header > div:last-child { text-align: right; max-width: 63mm; padding-top: 3mm; }
-.notebook-report > header small, .notebook-report > header strong { display: block; }
-.notebook-report > header small { font-size: 8pt; letter-spacing: .08em; color: #64705f; }
-.notebook-report > header strong { font-size: 10pt; margin-top: 2mm; }
+.notebook-report { width: 210mm; height: 297mm; display: flex; flex-direction: column; gap: 5mm; padding: 10mm; background: #fff; color: #1c241f; font-family: Inter, "Liberation Sans", sans-serif; font-size: 11pt; font-weight: 430; line-height: 1.35; color-scheme: light; }
+.notebook-report > header { display: flex; justify-content: space-between; align-items: flex-end; gap: 8mm; flex: none; padding: 0 0 3.5mm; border-bottom: 1px solid #c5cfc2; }
+.notebook-report .report-overline { font-size: 8pt; font-weight: 500; letter-spacing: .04em; color: #667566; }
+.notebook-report h1 { font-weight: 560; font-size: 22pt; letter-spacing: -.03em; line-height: 1.05; margin: 1.2mm 0 .8mm; overflow-wrap: anywhere; }
+.notebook-report > header p { font-size: 9.5pt; font-weight: 400; margin: 0; color: #5d6b60; }
+.notebook-report .report-period { text-align: right; max-width: 72mm; padding-bottom: .4mm; }
+.notebook-report .report-period small, .notebook-report .report-period > span { display: block; }
+.notebook-report .report-period small { font-size: 8pt; font-weight: 500; letter-spacing: .04em; color: #667566; }
+.notebook-report .report-period > span { font-size: 12pt; font-weight: 500; margin-top: 1.2mm; color: #1c241f; letter-spacing: -.02em; }
 .notebook-report .report-body { flex: 1; min-height: 0; position: relative; overflow: hidden; }
 .notebook-report .report-content { width: 100%; transform: scale(var(--report-content-scale,1)); transform-origin: top left; display: flow-root; }
 .notebook-report table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11pt; }
 .notebook-report td, .notebook-report th { padding: .7mm 1mm; line-height: 1.2; border-bottom: 1px solid #dedfd6; text-align: center; overflow-wrap: anywhere; }
-.notebook-report td:first-child, .notebook-report th:first-child { width: 40%; text-align: left; }
-.notebook-report th { font-size: 9pt; color: #52624d; padding-bottom: 2.5mm; }
+.notebook-report td:first-child, .notebook-report th:first-child { width: 40%; text-align: left; font-weight: 500; }
+.notebook-report th { font-size: 8.5pt; font-weight: 560; color: #52624d; padding-bottom: 2.5mm; letter-spacing: .02em; }
 .notebook-report th small { display: block; font-size: 8pt; font-weight: 400; margin-top: 1mm; }
 .notebook-report tbody td:not(:first-child) { color: #3c6545; }
 .notebook-report .report-intro { margin-top: 0; color: #586753; }
 .notebook-report section { margin-bottom: 4mm; }
-.notebook-report h2 { font-size: 12pt; margin: 3mm 0 2mm; padding-bottom: 1.5mm; border-bottom: 1px solid #d9ded5; }
+.notebook-report h2 { font-size: 12pt; font-weight: 600; margin: 3mm 0 2mm; padding-bottom: 1.5mm; border-bottom: 1px solid #d9ded5; }
 .notebook-report article { display: grid; grid-template-columns: 17mm 1fr; gap: 3mm; padding: 1.5mm 0; }
 .notebook-report article > b { font-size: 9pt; padding-top: 1mm; color: #5b6d53; }
 .notebook-report p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 1mm 0 2mm; }
