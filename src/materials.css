@@ -98,9 +98,11 @@
 
   /* Permanent action slots: status/copy changes must not reflow neighbouring controls. */
   .review-row-header { gap: 8px; }
-  .review-row-header .review-row { grid-template-columns: 28px minmax(0,1fr) 82px 18px; }
-  .review-state-label { width: 82px; min-width: 82px; height: 26px; padding-inline: 7px; }
-  .review-row-tools { display: grid; grid-template-columns: 102px 78px; gap: 6px; align-items: center; }
+  .review-row-header .review-row { grid-template-columns: 28px minmax(0,1fr) 92px 18px; }
+  .review-state-label { width: 92px; min-width: 92px; height: 26px; padding-inline: 6px; overflow: hidden; }
+  .review-state-label > span { display: block; width: 100%; min-width: 0; overflow: hidden; }
+  .review-state-label span span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px; line-height: 26px; }
+  .review-row-tools { display: grid; grid-template-columns: 102px 78px; gap: 6px; align-items: center; flex: none; min-width: 0; }
   .review-row-tools button { width: 100%; height: 44px; min-width: 0; white-space: nowrap; padding: 8px 6px; justify-content: center; line-height: 1.2; }
   .review-row-tools :is(.one-touch-review,.quick-register),
   .review-row-tools :is(.one-touch-review,.quick-register):is(:hover,:active,:focus-visible) { animation: none; transform: none; scale: 1; }
