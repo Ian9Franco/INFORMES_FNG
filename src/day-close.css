@@ -15,7 +15,13 @@
 .daily-list .platform-section-heading { margin: 12px 12px 8px; }
 .daily-list .platform-section-heading h3 { color: var(--service-ink); font-size: 15px; }
 .daily-list .platform-section-heading > span { color: var(--service-ink); background: var(--service-chip); border-radius: 999px; padding: 4px 8px; }
-.daily-list .review-list { display: grid; gap: 8px; padding: 0 8px 8px; }
+.daily-list .review-list { display: grid; gap: 8px; padding: 0 8px 8px 12px; }
+.daily-list .review-list .review-item { margin-inline: 0; padding-inline: 4px 8px; }
+.daily-list .review-list .review-item.is-expanded { margin-inline: 0; padding-inline: 8px 10px; }
+.daily-list .review-row-header { border-radius: 14px; padding: 2px 4px; margin-inline: -4px; }
+.daily-list .review-row-header .review-row:hover { background: transparent; }
+.review-item:hover .review-row-header,
+.review-item:focus-within .review-row-header { background: var(--surface-soft); }
 .task-platform[data-service='meta_ads'] { color: #1b5234; background: #d3ead9; }
 .task-platform[data-service='google_ads'] { color: #163e72; background: #d5e4f6; }
 .task-platform[data-service='meta_organic'] { color: #7a4510; background: #f4e2c4; }
