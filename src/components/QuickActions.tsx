@@ -5,7 +5,7 @@
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'motion/react'
 import { Minus, Plus, Star, X } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
-import { ACTION_TYPES, actionDefinition, availableCustomActions, entryDefinition, definitionService, isScheduledAction, todayStoryDay, type CustomAction, type ActionTypeId, type ReviewAction } from '../review-actions'
+import { ACTION_TYPES, CREATED_WITH_END_DATE, STORY_DAYS, actionDefinition, availableCustomActions, entryDefinition, definitionService, isScheduledAction, todayStoryDay, type CustomAction, type ActionTypeId, type ReviewAction, type StoryDayCount } from '../review-actions'
 import { WORK_SERVICES, serviceLabel, type WorkService } from '../work-services'
 import StoryDayPicker from './StoryDayPicker'
 import CreateAction from './CreateAction'
@@ -43,7 +43,8 @@ export default function QuickActions({ value, onChange, compact = false, storage
   const transition = calm ? { duration: 0 } : { type: 'spring' as const, stiffness: 380, damping: 32 }
   function add(typeId: ActionTypeId, customDefinition = catalog.find(item => item.id === typeId)) {
     if (value.length >= 40 || value.some(item => item.typeId === typeId)) return
-    onChange([...value, { id: crypto.randomUUID(), typeId, quantity: 1, source: 'manual', evidence: 'user_confirmed', ...(customDefinition ? { customDefinition } : {}), ...(isScheduledAction(typeId) ? { scheduledDays: [todayStoryDay()] } : {}) }])
+    const today = todayStoryDay()
+    onChange([...value, { id: crypto.randomUUID(), typeId, quantity: 1, source: 'manual', evidence: 'user_confirmed', ...(customDefinition ? { customDefinition } : {}), ...(typeId === 'meta.story.scheduled' ? { scheduledDays: [today], storyCounts: [{ day: today, quantity: 1 }] } : isScheduledAction(typeId) ? { scheduledDays: [today] } : {}) }])
   }
   function quantity(id: string, count: number) {
     if (!Number.isSafeInteger(count) || count < 1 || count > 999) return
@@ -60,11 +61,15 @@ export default function QuickActions({ value, onChange, compact = false, storage
     {onCreate ? <CreateAction key={`${clientId ?? 'general'}:${platform}`} clientId={clientId} platform={platform} catalog={catalog} onCreate={definition => { onCreate(definition); add(definition.id, definition) }} /> : null}
     <div className="selected-action-tags" aria-label="Acciones seleccionadas"><AnimatePresence initial={false} mode="popLayout">{value.map(item => {
       const definition = entryDefinition(item)!
-      return <motion.div className={`selected-action ${isScheduledAction(item.typeId) ? 'has-schedule' : ''}`} key={item.id} layout="position" data-action-id={item.id} data-action-type-id={item.typeId} initial={calm ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={transition}>
+      const story = item.typeId === 'meta.story.scheduled'
+      return <motion.div className={`selected-action ${isScheduledAction(item.typeId) || CREATED_WITH_END_DATE.has(item.typeId) ? 'has-schedule' : ''}`} key={item.id} layout="position" data-action-id={item.id} data-action-type-id={item.typeId} initial={calm ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={transition}>
         <span className="action-selected-check"><AnimatedCheck /></span><div className="selected-action-label"><small>{serviceLabel(definitionService(definition))}</small><strong>{definition.label}</strong></div>
-        <div className="action-quantity"><button type="button" disabled={item.quantity <= 1} onClick={() => quantity(item.id, item.quantity - 1)} aria-label={`Reducir cantidad: ${definition.label}`}><Minus size={14} /></button><QuantityInput value={item.quantity} label={definition.label} onCommit={next => quantity(item.id, next)} /><button type="button" disabled={item.quantity >= 999} onClick={() => quantity(item.id, item.quantity + 1)} aria-label={`Aumentar cantidad: ${definition.label}`}><Plus size={14} /></button></div>
+        {story ? <span className="story-total">{item.quantity} {item.quantity === 1 ? 'historia' : 'historias'}</span> : <div className="action-quantity"><button type="button" disabled={item.quantity <= 1} onClick={() => quantity(item.id, item.quantity - 1)} aria-label={`Reducir cantidad: ${definition.label}`}><Minus size={14} /></button><QuantityInput value={item.quantity} label={definition.label} onCommit={next => quantity(item.id, next)} /><button type="button" disabled={item.quantity >= 999} onClick={() => quantity(item.id, item.quantity + 1)} aria-label={`Aumentar cantidad: ${definition.label}`}><Plus size={14} /></button></div>}
         <button type="button" className="remove-action" onClick={() => onChange(value.filter(selected => selected.id !== item.id))} aria-label={`Quitar acción: ${definition.label}`}><X size={16} /></button>
-        {isScheduledAction(item.typeId) ? <StoryDayPicker publication={item.typeId === 'meta.post.scheduled'} value={item.scheduledDays!} onChange={scheduledDays => onChange(value.map(entry => entry.id === item.id ? { ...entry, scheduledDays } : entry))} /> : null}
+        {story && item.storyCounts ? <StoryDayPicker counts={item.storyCounts} onCounts={(storyCounts: StoryDayCount[]) => onChange(value.map(entry => entry.id === item.id ? { ...entry, storyCounts, scheduledDays: STORY_DAYS.filter(day => storyCounts.some(part => part.day === day.id)).map(day => day.id), quantity: storyCounts.reduce((sum, part) => sum + part.quantity, 0) } : entry))} /> : null}
+        {story && !item.storyCounts ? <><StoryDayPicker value={item.scheduledDays!} onChange={scheduledDays => onChange(value.map(entry => entry.id === item.id ? { ...entry, scheduledDays } : entry))} /><button type="button" className="text-button story-split" onClick={() => { const storyCounts = item.scheduledDays!.map(day => ({ day, quantity: 1 })); onChange(value.map(entry => entry.id === item.id ? { ...entry, storyCounts, quantity: storyCounts.reduce((sum, part) => sum + part.quantity, 0) } : entry)) }}>Indicar cuántas por día</button></> : null}
+        {!story && isScheduledAction(item.typeId) ? <StoryDayPicker publication={item.typeId === 'meta.post.scheduled'} value={item.scheduledDays!} onChange={scheduledDays => onChange(value.map(entry => entry.id === item.id ? { ...entry, scheduledDays } : entry))} /> : null}
+        {CREATED_WITH_END_DATE.has(item.typeId) ? <label className="action-end-date"><span>Termina el</span><input type="date" aria-label={`Fecha de fin: ${definition.label}`} value={item.endsOn ?? ''} onChange={event => onChange(value.map(entry => { if (entry.id !== item.id) return entry; const endsOn = event.target.value; return endsOn ? { ...entry, endsOn } : { ...entry, endsOn: undefined } }))} /><small>{item.endsOn ? 'Ese día deja de estar activo.' : 'Opcional, para un feriado o un evento del cliente.'}</small></label> : null}
       </motion.div>
     })}</AnimatePresence>{!value.length ? <p className="quick-actions-empty">Las acciones elegidas aparecen acá. También podés registrar una revisión sin cambios.</p> : null}</div>
   </section></LayoutGroup>
