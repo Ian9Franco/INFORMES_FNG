@@ -3,6 +3,8 @@ import { isScheduledAction } from './review-actions.ts'
 import { reviewService, type WorkService } from './work-services.ts'
 
 export const dailyRequired = (service: WorkService, day: string) => service === 'meta_ads' && ![0,6].includes(date(day).getDay())
+/** The day can close when every obligatory review is done. A day with none is already closed. */
+export const mandatoryDayReady = (required: number, done: number) => required === 0 || done >= required
 export const cadenceLabel = (service: WorkService) => service === 'meta_ads' ? 'Revisión de lunes a viernes' : service === 'google_ads' ? '2–3 días por semana · sin días fijos' : 'Programación de sábado/domingo · miércoles a viernes; revisión opcional'
 export function weeklyServiceProgress(reviews: Review[], clientId: string, service: WorkService, day: string) {
   const start=monday(date(day)),end=date(start);end.setDate(end.getDate()+7)
