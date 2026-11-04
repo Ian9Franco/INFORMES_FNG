@@ -8,7 +8,7 @@ import { openPendingTasks } from './pending-tasks'
 import ReviewIssues from './components/ReviewIssues'
 import { latestIssues, reviewIssueText, reviewConditionTone, conditionMark, validReviewIssues, type ReviewIssue } from './review-issues'
 import { serviceProvider, reviewService, type WorkService } from './work-services'
-import { cadenceLabel, dailyRequired, weeklyServiceProgress } from './service-cadence'
+import { cadenceLabel, dailyRequired, mandatoryDayReady, weeklyServiceProgress } from './service-cadence'
 import useConfirmation from './components/useConfirmation'
 import ClientPicker from './components/ClientPicker'
 import NotebookReport from './components/NotebookReport'
@@ -134,6 +134,8 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const [clientSearch, setClientSearch] = useState('')
   const [clientFilter, setClientFilter] = useState<ClientFilter>('activos')
   const [printMode, setPrintMode] = useState<PrintMode>('grilla')
+  const [printBundle, setPrintBundle] = useState<'single' | 'both'>('single')
+  const [celebrate, setCelebrate] = useState(false)
   const [reportTitle, setReportTitle] = useState(() => { try { return localStorage.getItem('informe-fng-report-title') || 'Informe Ian' } catch { return 'Informe Ian' } })
   const [exportingImage, setExportingImage] = useState(false)
   const [error, setError] = useState('')
@@ -169,7 +171,15 @@ export default function App({ initialData, onChange, storageMode = 'local', user
   const pending = useMemo(() => openPendingTasks(db), [db])
   const reportPending = pending
   const reviewsToday = active.reduce((sum,client) => sum + activePlatforms(client).filter(platform => dailyRequired(platform,today) && reviews.some(review => review.clientId === client.id && review.date === today && reviewService(review) === platform)).length,0)
+  const reportsReady = mandatoryDayReady(targetsToday, reviewsToday)
+  const optionalOpen = active.reduce((sum, client) => sum + activePlatforms(client).filter(service => !dailyRequired(service, today) && !reviews.some(review => review.clientId === client.id && review.date === today && reviewService(review) === service)).length, 0)
   const completion = targetsToday ? Math.round((reviewsToday / targetsToday) * 100) : 0
+  const wasReady = useRef(reportsReady)
+  useEffect(() => {
+    if (!wasReady.current && reportsReady && targetsToday > 0) setCelebrate(true)
+    if (!reportsReady) setCelebrate(false)
+    wasReady.current = reportsReady
+  }, [reportsReady, targetsToday])
   const current = selected ? reviews.find(reviewItem => reviewItem.clientId === selected.id && reviewItem.date === selected.day && reviewService(reviewItem) === selected.platform) : undefined
   const client = selected ? db.clients.find(clientItem => clientItem.id === selected.id) : undefined
   const weekLabel = `${format(days[0])} al ${format(days[5])} de ${date(days[5]).getFullYear()}`
@@ -524,19 +534,44 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     } finally { setCapture(null) }
   }
 
-  function printReport() {
+  function printReport(fileMode: PrintMode | 'ambos' = printMode) {
     restorePrintTitle.current?.()
     const previous = document.title
     const restore = () => {
       document.title = previous
       window.removeEventListener('afterprint', restore)
       restorePrintTitle.current = null
+      if (fileMode === 'ambos') setPrintBundle('single')
     }
     restorePrintTitle.current = restore
     window.addEventListener('afterprint', restore, { once: true })
-    document.title = reportFileName(documentTitle, reportPeriod, reportPeriod === 'month' ? reportMonth : week, printMode)
+    document.title = reportFileName(documentTitle, reportPeriod, reportPeriod === 'month' ? reportMonth : week, fileMode)
     try { window.print() } catch { restore(); setError('No se pudo abrir el diálogo de impresión.') }
   }
+
+  function saveDayReports() {
+    setCelebrate(false)
+    setReportPeriod('week')
+    setWeek(monday(date(today)))
+    setPrintBundle('both')
+  }
+
+  useEffect(() => {
+    if (printBundle !== 'both') return
+    let cancelled = false
+    const wait = async () => {
+      await document.fonts.ready
+      const start = performance.now()
+      while (!cancelled && performance.now() - start < 5000) {
+        const host = document.querySelector('.print-report-host')
+        if (host?.querySelector('.report-grid') && host.querySelector('[data-layout-ready="true"]')) break
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      }
+      if (!cancelled) printReport('ambos')
+    }
+    void wait()
+    return () => { cancelled = true }
+  }, [printBundle])
 
   function importBackup(file: File) {
     file.text().then(async content => {
@@ -615,7 +650,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
           <div id="activity-records" hidden={!showActivity}>{(db.activity ?? []).filter(event => event.status === 'pending' && event.date === today).map(event => <article key={event.id}><div><strong>{clients.find(client => client.id === event.clientId)?.name ?? `Cuenta sin vincular: ${event.accountCandidate ?? 'sin ID'}`}</strong><p>{platformLabel(observedService(event))} · {Math.floor(event.focusedMs / 60000)} min estimados · {event.navigationSignals} señales</p></div>{event.clientId ? <button className="secondary-button" onClick={() => openReview(event.clientId!, event.date, 'modal', false, observedService(event))}>{findReview(event.clientId, event.date, observedService(event)) ? 'Ver revisión' : 'Registrar revisión'}</button> : null}<button className="icon-button" aria-label="Descartar sesión" onClick={() => setDb(currentDb => ({ ...currentDb, activity: currentDb.activity?.map(item => item.id === event.id ? { ...item, status: 'dismissed' } : item) }))}><Icon name="close" /></button></article>)}</div>
         </section> : null}
         <div className="daily-overview"><section className="hero-panel">
-          <div><span className="section-kicker">REVISIÓN DIARIA · META ADS</span><h2>{!targetsToday ? 'Sin obligación diaria hoy' : completion === 100 ? 'Meta Ads al día' : 'Seguimiento en curso'}</h2><p>{reviewsToday} de {targetsToday} cuentas Meta Ads revisadas. Google y orgánico tienen frecuencia semanal flexible.</p></div>
+          <div><span className="section-kicker">REVISIÓN DIARIA · META ADS</span><h2>{!targetsToday ? 'Sin obligación diaria hoy' : reportsReady ? 'Jornada obligatoria lista' : 'Seguimiento en curso'}</h2><p>{reviewsToday} de {targetsToday} cuentas Meta Ads revisadas. Google y orgánico se pueden seguir después.</p></div>
           <div className="progress-ring" style={{ '--progress': `${completion * 3.6}deg` } as React.CSSProperties}><span><b>{targetsToday ? `${completion}%` : '—'}</b><small>Meta Ads</small></span></div>
         </section>
 
@@ -634,7 +669,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
               const accounts = active.filter(client => platformActive(client,platform))
               const visible = dailyClients.filter(client => platformActive(client,platform) && (dailyFilter === 'todos' || Boolean(findReview(client.id,today,platform)) === (dailyFilter === 'revisados')))
               const emptyText = !accounts.length ? 'Sin cuentas activas en esta plataforma.' : dailySearch.trim() ? 'No hay cuentas que coincidan con la búsqueda y el filtro.' : dailyFilter === 'revisados' ? 'Todavía no hay revisiones registradas hoy en esta plataforma.' : dailyFilter === 'pendientes' ? 'Todas las cuentas de esta plataforma están revisadas hoy.' : 'Sin cuentas para mostrar.'
-              return <section key={platform} className="platform-section" aria-label={`Revisiones ${platformLabel(platform)}`}><header className="platform-section-heading"><div><h3>{platformLabel(platform)}</h3><p className="service-cadence">{cadenceLabel(platform)}{!dailyRequired(platform,today) ? ' · sin obligación de revisar hoy' : ''}</p></div><span>{accounts.length} {accounts.length === 1 ? 'cliente' : 'clientes'}</span></header>
+              return <section key={platform} className="platform-section" data-service={platform} aria-label={`Revisiones ${platformLabel(platform)}`}><header className="platform-section-heading"><div><h3>{platformLabel(platform)}</h3><p className="service-cadence">{cadenceLabel(platform)}{dailyRequired(platform,today) ? ' · obligatoria hoy' : ' · opcional hoy'}</p></div><span>{accounts.length} {accounts.length === 1 ? 'cliente' : 'clientes'}</span></header>
             {visible.length ? <div className="review-list">{visible.map(clientItem => {
               const reviewItem = findReview(clientItem.id, today,platform)
               const expanded = selected?.mode === 'inline' && selected.id === clientItem.id && selected.day === today && selected.platform === platform
@@ -667,7 +702,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
             <p className="tasks-help">Pendientes guardados, de cualquier fecha. Las cuentas sin revisar están en «Por revisar».</p>
             {pending.length ? <div className="task-list">{pending.map(item => <div className="task-row" key={item.id}>
               <button className="task-check" onClick={() => resolvePending(item.id)} aria-label={`Completar pendiente: ${item.text}`}><Icon name="check" /></button>
-              <div><div className="task-identity"><strong>{db.clients.find(clientItem => clientItem.id === item.clientId)?.name}</strong><span className="task-platform">{item.service || item.platform ? platformLabel(item.service ?? item.platform!) : 'General'}</span></div><p>{item.text.trim()}</p></div>
+              <div><div className="task-identity"><strong>{db.clients.find(clientItem => clientItem.id === item.clientId)?.name}</strong><span className="task-platform" data-service={item.service ?? item.platform ?? 'general'}>{item.service || item.platform ? platformLabel(item.service ?? item.platform!) : 'General'}</span></div><p>{item.text.trim()}</p></div>
             </div>)}</div> : <EmptyState icon="check" title="Sin pendientes abiertos" text="Agregá un «Nuevo pendiente» en una revisión. Las acciones ya realizadas, como programar una historia, no generan pendientes automáticamente." />}
           </section>
         </div>
@@ -715,7 +750,7 @@ export default function App({ initialData, onChange, storageMode = 'local', user
           <label className="report-title-label" htmlFor="report-title">Título del documento<input className="report-title-input" id="report-title" value={reportTitle} maxLength={80} onChange={event => setReportTitle(event.target.value)} placeholder="Informe Ian" /></label>
           <div className="report-mode" role="group" aria-label="Formato del informe"><span className="section-kicker">FORMATO DEL INFORME</span><button className={printMode === 'grilla' ? 'active' : ''} aria-pressed={printMode === 'grilla'} onClick={() => setPrintMode('grilla')}><span><Icon name="calendar" /></span><div><strong>Simple</strong><small>{reportPeriod === 'month' ? 'Resumen de clientes del mes' : 'Matriz de clientes por día'}</small></div><i>{printMode === 'grilla' ? <Icon name="check" size={14} /> : null}</i></button><button className={printMode === 'detalle' ? 'active' : ''} aria-pressed={printMode === 'detalle'} onClick={() => setPrintMode('detalle')}><span><Icon name="report" /></span><div><strong>Detallado</strong><small>Acciones y observaciones</small></div><i>{printMode === 'detalle' ? <Icon name="check" size={14} /> : null}</i></button></div>
           <div className="report-summary"><div><span>Revisiones</span><strong>{reportReviews.length}</strong></div><div><span>Clientes cubiertos</span><strong>{new Set(reportReviews.map(item => item.clientId)).size}</strong></div><div><span>Pendientes</span><strong>{reportPending.length}</strong></div></div>
-          <div className="report-downloads"><button className="primary-button print-button" onClick={printReport}><Icon name="print" />Imprimir o guardar PDF</button><button className="secondary-button" onClick={downloadPng} disabled={exportingImage}><Icon name="download" />{exportingImage ? 'Preparando imagen…' : 'Descargar PNG'}</button></div>
+          <div className="report-downloads"><button className="primary-button print-button" onClick={() => printReport()}><Icon name="print" />Imprimir o guardar PDF</button><button className="secondary-button" onClick={downloadPng} disabled={exportingImage}><Icon name="download" />{exportingImage ? 'Preparando imagen…' : 'Descargar PNG'}</button></div>
           <p className="helper-text">El navegador abrirá el diálogo de impresión. Elegí “Guardar como PDF” para generar el archivo.</p>
           <ReportArchivePanel title={documentTitle} today={today} week={week} confirm={confirm} buildPdf={buildPdf} />
           {onSync ? <div className="report-sync"><button className="secondary-button" disabled={syncingReport} onClick={async () => { setSyncingReport(true); try { await onSync(); setNotice('Estado sincronizado con la DB. Disponible en tus otros navegadores.'); } catch (error) { setError(error instanceof Error ? error.message : 'No se pudo sincronizar. Los pendientes siguen en este dispositivo.'); } finally { setSyncingReport(false) } }}><Icon name="check" />{syncingReport ? 'Sincronizando…' : 'Sincronizar con DB'}</button><p>Guardado automático por registro. Envía pendientes y recupera cambios; no guarda otra copia del informe.</p></div> : null}
@@ -728,6 +763,8 @@ export default function App({ initialData, onChange, storageMode = 'local', user
     <footer className="site-footer screen"><a href="https://ian-pontorno-portfolio.vercel.app" target="_blank" rel="noopener noreferrer">© {new Date().getFullYear()} Ian Pontorno<span>Diseño y desarrollo</span><ExternalLink size={13} aria-hidden="true" /></a><a className="repository-link" href="https://github.com/Ian9Franco/INFORMES_FNG" target="_blank" rel="noopener noreferrer" aria-label="Ver el código de Informes FNG en GitHub"><svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.49c-2.23.48-2.7-.95-2.7-.95-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.22.82 1.22.82.71 1.22 1.87.87 2.33.67.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.58.82-2.14-.08-.2-.36-1.02.08-2.12 0 0 .67-.22 2.2.82A7.65 7.65 0 0 1 8 3.87c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.14 0 3.07-1.87 3.75-3.65 3.95.29.25.54.74.54 1.49v2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z" /></svg><span>GitHub</span></a></footer>
 
     <AnimatePresence initial={false}>{selected?.mode === 'inline' ? <RapidSaveBar key="rapid-save" barRef={saveBarRef} onKeyDown={reviewShortcut}><div><strong>{client?.name}</strong><small>Borrador local · Ctrl/⌘ + Enter para guardar</small></div><button className="primary-button save-button" onClick={() => saveReview()} disabled={!client}><Icon name="check" size={16} />Guardar</button><button className="secondary-button save-next-button" onClick={() => saveReview(true)} disabled={!client}>Guardar y siguiente <Icon name="chevron-right" /></button></RapidSaveBar> : null}</AnimatePresence>
+    {tab === 'jornada' ? <div className="day-save-bar screen" role="region" aria-label="Cierre de la jornada"><p>{reportsReady ? 'Listo para guardar el informe simple y el detallado de esta semana.' : `Faltan ${Math.max(0, targetsToday - reviewsToday)} ${targetsToday - reviewsToday === 1 ? 'revisión obligatoria' : 'revisiones obligatorias'} de Meta Ads.`}</p><button type="button" className="primary-button" disabled={!reportsReady || printBundle === 'both'} onClick={saveDayReports}><Icon name="print" />Guardar informes</button></div> : null}
+    {celebrate ? <div className="day-celebration screen" role="dialog" aria-modal="true" aria-labelledby="day-done-title" onKeyDown={event => { if (event.key === 'Escape') setCelebrate(false) }}><div className="confetti" aria-hidden="true">{Array.from({ length: 16 }, (_, index) => <i key={index} style={{ left: `${6 + (index * 37) % 90}%`, background: ['#2d8a54', '#3c7dce', '#d08a32', '#e7c15a'][index % 4], animationDelay: `${index * 0.04}s` }} />)}</div><div className="day-celebration-card"><span className="section-kicker">JORNADA</span><h2 id="day-done-title">Terminaste lo obligatorio</h2><p>Meta Ads de hoy está completo. Podés guardar el informe simple y el detallado juntos, o seguir con Google y orgánico.</p><div className="day-celebration-actions"><button type="button" className="primary-button" onClick={saveDayReports}><Icon name="print" />Guardar informe simple y detallado</button><button type="button" className="secondary-button" onClick={() => setCelebrate(false)}>{optionalOpen ? `Seguir con ${optionalOpen} ${optionalOpen === 1 ? 'opcional' : 'opcionales'}` : 'Seguir en la jornada'}</button></div></div></div> : null}
     {undoReview ? <div className="quick-undo screen" role="status"><span>{clients.find(item => item.id === undoReview.clientId)?.name} · revisado sin cambios</span><button type="button" onClick={undoQuickReview}>Deshacer</button></div> : null}
 
     {selected?.mode === 'modal' ? <dialog ref={dialogRef} className={`review-modal screen ${closingReview ? 'is-closing' : ''}`} aria-labelledby="review-title" inert={closingReview} onKeyDown={reviewShortcut} onCancel={event => { event.preventDefault(); closeReview() }} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeReview() } }}>
@@ -743,6 +780,6 @@ export default function App({ initialData, onChange, storageMode = 'local', user
         <footer>{current ? <button className="danger-button" onClick={removeReview}><Icon name="trash" />Quitar revisión</button> : null}<div><button className="secondary-button" onClick={() => closeReview()}>Salir</button><button className="primary-button save-button" disabled={!client || closingReview} onClick={() => saveReview()}><Icon name="check" />Guardar revisión</button><button className="secondary-button save-next-button" disabled={!client || closingReview} onClick={() => saveReview(true)}>Guardar y siguiente</button></div></footer>
     </dialog> : null}
 
-    <div ref={printHost} className="print-report-host" data-capture={capture ? `${capture.period}:${capture.id}:${capture.mode}` : 'screen'}><NotebookReport store={reportStore} week={capture?.period === 'week' ? capture.id : week} month={capture ? capture.period === 'month' ? capture.id : undefined : reportPeriod === 'month' ? reportMonth : undefined} mode={capture?.mode ?? printMode} title={documentTitle} /></div>
+    <div ref={printHost} className="print-report-host" data-capture={capture ? `${capture.period}:${capture.id}:${capture.mode}` : 'screen'}>{capture ? <NotebookReport store={reportStore} week={capture.period === 'week' ? capture.id : week} month={capture.period === 'month' ? capture.id : undefined} mode={capture.mode} title={documentTitle} /> : printBundle === 'both' ? <><NotebookReport store={reportStore} week={week} mode="grilla" title={documentTitle} /><NotebookReport store={reportStore} week={week} mode="detalle" title={documentTitle} /></> : <NotebookReport store={reportStore} week={week} month={reportPeriod === 'month' ? reportMonth : undefined} mode={printMode} title={documentTitle} />}</div>
   </div></MotionConfig>
 }

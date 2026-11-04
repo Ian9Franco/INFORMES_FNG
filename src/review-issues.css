@@ -30,16 +30,17 @@
 /* Print/export uses explicit ink, never a color-only warning. */
 .notebook-report .report-issue { display: block; color: #714410; font-size: 8pt; line-height: 1.3; margin-top: 1mm; font-weight: 650; overflow-wrap: anywhere; }
 .notebook-report .report-issue.is-client-paused { color: #38566a; }
-.notebook-report .simple-action-legend { color: #243028; font-size: 7.5pt; line-height: 1.3; margin: 0 0 .7mm; padding: 0 0 .7mm; border-bottom: 1px solid #dedfd6; text-align: left; }
-.notebook-report .simple-action-legend strong { color: #173024; font-weight: 700; }
+.notebook-report .simple-action-legend { display: flex; flex-direction: column; gap: .35mm; color: #3a463d; font-size: 7.5pt; font-weight: 400; line-height: 1.35; margin: 0 0 1.2mm; padding: 0 0 1.2mm; border-bottom: 1px solid #e1e4da; text-align: left; }
+.notebook-report .simple-action-legend span { display: block; }
+.notebook-report .simple-action-legend b { font-weight: 600; color: #1c241f; }
 .notebook-report .report-service-group { display: block; margin: 0; line-height: 1.2; }
 .notebook-report .report-service-tag, .notebook-report .report-action-tag, .notebook-report .report-remark b { box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .notebook-report .report-service-tag, .notebook-report .report-action-tag { display: inline; padding: 0 .55mm; border-radius: .6mm; }
-.notebook-report .report-service-tag { font-size: 7.5pt; font-weight: 700; letter-spacing: .03em; margin-right: .7mm; }
+.notebook-report .report-service-tag { font-size: 7.5pt; font-weight: 600; letter-spacing: .01em; margin-right: .7mm; }
 .notebook-report .report-service-tag.is-meta_ads { background: #d7ead8; color: #143726; }
 .notebook-report .report-service-tag.is-google_ads { background: #d5e5f6; color: #143454; }
 .notebook-report .report-service-tag.is-meta_organic { background: #f4e4c8; color: #5a3c0c; }
-.notebook-report .report-action-tag { background: #eef3ea; color: #1b2a22; font-weight: 650; margin-right: .55mm; }
+.notebook-report .report-action-tag { background: #eef3ea; color: #1b2a22; font-weight: 450; margin-right: .55mm; }
 .notebook-report .report-action-tag.is-pending { background: #fff1c9; color: #5c4308; }
 .notebook-report .report-remark { display: block; margin-top: .7mm; padding: .55mm 1.2mm .55mm 1.5mm; border-radius: 1mm; font-size: 8pt; line-height: 1.35; text-align: left; overflow-wrap: anywhere; }
 .notebook-report .report-remark b { display: inline-block; margin-right: .8mm; padding: 0 .8mm; border-radius: .6mm; font-size: 7.5pt; letter-spacing: .01em; }

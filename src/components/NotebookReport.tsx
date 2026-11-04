@@ -1,7 +1,7 @@
 'use client'
 
 import { useLayoutEffect, useRef, useState } from 'react'
-import { date, format, type Review, type Store, weekDays } from '../data'
+import { format, reportSpanLabel, type Review, type Store, weekDays } from '../data'
 import { sortClients } from '../clients'
 import { monthBounds } from '../sync/records'
 import { issueCellText, conditionMark } from '../review-issues'
@@ -45,7 +45,7 @@ function GridReport({ store, week, month, mode, title, preview = false }: { stor
   const entries = store.reviews.filter(review => bounds ? review.date >= bounds.start && review.date < bounds.end : days.includes(review.date))
   const legend = simpleActionLegend(entries)
   const pending = store.pending.filter(item => !item.resolved)
-  const weekLabel = month ? new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(date(`${month}-01`)) : `${format(days[0])} al ${format(days[5])} de ${date(days[5]).getFullYear()}`
+  const weekLabel = reportSpanLabel(month, days)
 
   useLayoutEffect(() => {
     const resize = () => {
@@ -74,9 +74,9 @@ function GridReport({ store, week, month, mode, title, preview = false }: { stor
   }, [store, week, month, mode, title, preview])
 
   const paper = <div ref={sheet} data-export-page="1" className={`notebook-report ${mode === 'detalle' ? 'report-detail' : 'report-grid'} ${month ? 'is-monthly' : 'is-weekly'}`}>
-    <header><div><span className="report-overline">LIBRETA DE SEGUIMIENTO</span><h1>{title}</h1><p>Publicidad · registro {month ? 'mensual' : 'semanal'}</p></div><div><small>{month ? 'MES' : 'SEMANA'}</small><strong>{weekLabel}</strong></div></header>
+    <header className="report-masthead"><div><span className="report-overline">Libreta de seguimiento</span><h1>{title}</h1><p>Registro {month ? 'mensual' : 'semanal'} de publicidad</p></div><div className="report-period"><small>{month ? 'Mes' : 'Semana'}</small><span>{weekLabel}</span></div></header>
     <div className="report-body" ref={area}><div className="report-content" ref={content}>
-      <p className="simple-action-legend" aria-label="Cómo leer el informe"><strong>{legend.split('\n')[0]}</strong>{legend.includes('\n') ? `\n${legend.split('\n').slice(1).join('\n')}` : ''}</p>
+      <p className="simple-action-legend" aria-label="Cómo leer el informe">{legend.split('\n').map((line, index) => <span key={index}>{index === 0 ? <><b>Cómo se lee. </b>{line.replace(/^Cómo se lee:\s*/, '')}</> : line}</span>)}</p>
       {month ? <table><thead><tr><th>CLIENTE</th><th title="Revisiones">REV.</th><th>QUÉ SE HIZO</th><th>ÚLTIMA REVISIÓN</th></tr></thead><tbody>{clients.filter(client => client.active || entries.some(review => review.clientId === client.id)).map(client => {
         const reviews = entries.filter(review => review.clientId === client.id).sort((a,b) => a.date.localeCompare(b.date))
         return <tr key={client.id}><td>{client.name}</td><td>{reviews.length}</td><td className="simple-period-actions"><PeriodWork reviews={reviews} /></td><td>{reviews.length ? format(reviews[reviews.length - 1].date) : '—'}</td></tr>

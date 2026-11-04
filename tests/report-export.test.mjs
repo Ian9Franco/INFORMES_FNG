@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { reportSpanLabel } from '../src/data.ts'
 import { activeReportStore, reportFileName } from '../src/report-export.ts'
 
 test('exports distinguish simple/detailed and weekly/monthly for both PDF and PNG', () => {
@@ -7,6 +8,11 @@ test('exports distinguish simple/detailed and weekly/monthly for both PDF and PN
   assert.equal(new Set(names).size, 4)
   assert.deepEqual(names, ['Informe Ian - semanal 2026-10-12 - simple','Informe Ian - semanal 2026-10-12 - detallado','Informe Ian - mensual 2026-10 - simple','Informe Ian - mensual 2026-10 - detallado'])
 })
+test('the report masthead spells the week in words instead of abbreviated dates', () => {
+  assert.equal(reportSpanLabel('2026-11', []), 'noviembre de 2026')
+  assert.equal(reportSpanLabel(undefined, ['2026-11-02','2026-11-03','2026-11-04','2026-11-05','2026-11-06','2026-11-07']), '2 al 7 de noviembre de 2026')
+})
+
 test('export title removes forbidden filename characters without losing Spanish names', () => {
   assert.equal(reportFileName('Informe: acción / Ian. ', 'month', '2026-10', 'grilla'), 'Informe- acción - Ian - mensual 2026-10 - simple')
   assert.equal(reportFileName('   ', 'week', '2026-10-12', 'detalle'), 'Informe Ian - semanal 2026-10-12 - detallado')

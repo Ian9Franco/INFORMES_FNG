@@ -1,6 +1,6 @@
 'use client'
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { date, format, type Store, weekDays } from '../data'
+import { reportSpanLabel, type Store, weekDays } from '../data'
 import { sortClients } from '../clients'
 import { monthBounds } from '../sync/records'
 import { paginateDetail, reviewDetailItems, type DetailBlock, type DetailPage } from '../report-layout'
@@ -19,7 +19,7 @@ export default function DetailedNotebookReport({ store, week, month, title, prev
   const days = weekDays(week)
   const bounds = month ? monthBounds(month) : undefined
   const entries = store.reviews.filter(review => bounds ? review.date >= bounds.start && review.date < bounds.end : days.includes(review.date))
-  const period = month ? new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(date(`${month}-01`)) : `${format(days[0])} al ${format(days[5])} de ${date(days[5]).getFullYear()}`
+  const period = reportSpanLabel(month, days)
   const summary = `${entries.length} revisiones · ${new Set(entries.map(review => review.clientId)).size} clientes`
   const blocks = useMemo<DetailBlock[]>(() => {
     const range = month ? monthBounds(month) : undefined
@@ -86,7 +86,7 @@ export default function DetailedNotebookReport({ store, week, month, title, prev
   }, [blocks, title, period, summary, preview])
 
   function header() {
-    return <header><div><span className="report-overline">LIBRETA DE SEGUIMIENTO</span><h1>{title}</h1><p>Publicidad · detalle {month ? 'mensual' : 'semanal'}</p></div><div><small>{month ? 'MES' : 'SEMANA'}</small><strong>{period}</strong><p className="detail-summary">{summary}</p></div></header>
+    return <header className="report-masthead"><div><span className="report-overline">Libreta de seguimiento</span><h1>{title}</h1><p>Detalle {month ? 'mensual' : 'semanal'} de publicidad</p></div><div className="report-period"><small>{month ? 'Mes' : 'Semana'}</small><span>{period}</span><p className="detail-summary">{summary}</p></div></header>
   }
   function footer(index: number) { return <footer><span>{title} · seguimiento publicitario</span><span>{new Date().toLocaleDateString('es-AR')} · {index + 1} / {pages.length}</span></footer> }
   const measureSheet = <div className="detail-measure" aria-hidden="true" inert><div ref={template} className="notebook-report report-detail">{header()}<div className="report-body detail-columns"><div className="detail-column"><div className="detail-measure-host" /></div><div className="detail-column" /></div>{footer(0)}<div className="detail-measure-source">{blocks.map(block => <ClientBlock key={block.id} block={block} />)}</div></div></div>
