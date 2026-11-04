@@ -36,6 +36,21 @@ test('scheduled stories carry explicit unique weekdays and render in canonical o
   assert.equal(validReviewActions([{...manual,scheduledDays:['mon']}]),false)
   assert.match(describeReviewActions({actions:'',actionEntries:[story]}),/para lunes, jueves/)
   assert.equal(storyDaysLabel([{actionEntries:[story]}]),'Lun · Jue')
+  const counted={...story,quantity:5,scheduledDays:['sat','sun'],storyCounts:[{day:'sat',quantity:3},{day:'sun',quantity:2}]}
+  assert.equal(validReviewActions([counted]),true)
+  assert.equal(validReviewActions([{...counted,quantity:4}]),false)
+  assert.equal(validReviewActions([{...counted,storyCounts:[{day:'sat',quantity:5}]}]),false)
+  assert.equal(validReviewActions([{...manual,storyCounts:counted.storyCounts}]),false)
+  assert.match(describeReviewActions({actions:'',actionEntries:[counted]}),/Programé historia: 3 para sábado y 2 para domingo/)
+  assert.equal(storyDaysLabel([{actionEntries:[counted]}]),'Sáb 3 · Dom 2')
+})
+
+test('a created ad, ad set or campaign can record an optional end date', () => {
+  const campaign={...manual,typeId:'meta.campaign.created',quantity:1,endsOn:'2026-12-24'}
+  assert.equal(validReviewActions([campaign]),true)
+  assert.equal(validReviewActions([{...campaign,endsOn:'2026-02-31'}]),false)
+  assert.equal(validReviewActions([{...manual,typeId:'google.keyword.updated',endsOn:'2026-12-24'}]),false)
+  assert.match(describeReviewActions({actions:'',actionEntries:[campaign]}),/hasta el 24\/12\/2026/)
 })
 
 test('catalog IDs are unique and distinguish identical labels across platforms', () => {

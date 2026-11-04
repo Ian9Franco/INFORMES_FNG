@@ -6,6 +6,7 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 
 ### Interfaz operativa
 - Informes en lenguaje llano para quien no cargó los datos: cada etiqueta dice el trabajo y la cantidad (por ejemplo, «2 anuncios añadidos», «3 palabras clave actualizadas»), con color distinto para Meta Ads, Google Ads y Meta orgánico. Las notas y las observaciones salen en bloques propios, con rótulo, y ya no se esconden detrás de «Notas en el detallado».
+- Historias: se anota cuántas van a cada día («5 historias: 3 para sábado y 2 para domingo») y el informe separa el día en que se programaron del día en que salen. Los registros viejos, sin ese reparto, siguen mostrando el total. Al crear un anuncio, conjunto o campaña se puede cargar una fecha de fin opcional, para un feriado o un evento del cliente.
 - Tablas separadas Meta Ads / Google Ads en Jornada, Semana y Clientes; archivo/reactivación, revisiones, cantidades y borradores independientes por plataforma. Informe unificado por cliente que excluye sólo la plataforma archivada.
 - Nueva unicidad cliente/fecha/plataforma y validación SQL de acciones por plataforma; RLS y restricciones de catálogo conservadas. Historial previo proyectado sin backfill; primera edición conserva todas las plataformas en un lote atómico.
 - Cabecera DB → tema → perfil, configuración de Companion en el menú de usuario y selector semanal/mensual ajustado al ancho de sus botones.

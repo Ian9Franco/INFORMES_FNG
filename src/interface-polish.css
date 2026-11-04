@@ -58,6 +58,19 @@
   .story-day-menu > strong { display: block; font-size: 15px; }
   .story-day-menu > p { color: var(--muted); font-size: 11px; margin: 6px 0 12px; line-height: 1.5; }
   .story-day-menu [role='group'] { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+  .story-day-menu .story-day-row { display: contents; }
+  .story-day-menu.is-counts [role='group'] { display: flex; flex-direction: column; }
+  .story-day-menu.is-counts .story-day-row { display: flex; align-items: center; gap: 8px; }
+  .story-day-menu.is-counts [role='checkbox'] { flex: 1; }
+  .story-day-quantity { display: inline-flex; align-items: center; flex: none; border-radius: 12px; background: var(--surface); }
+  .story-day-quantity button { width: 36px; min-height: 44px; border: 0; background: transparent; color: var(--accent); }
+  .story-day-quantity input { width: 42px; min-height: 44px; border: 0; background: transparent; text-align: center; color: var(--ink); font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+  .story-day-quantity input::-webkit-outer-spin-button, .story-day-quantity input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .story-total { flex: none; min-height: 44px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 12px; background: var(--surface); color: var(--accent); font-size: 12px; font-weight: 650; }
+  .action-end-date, .story-split { flex-basis: 100%; }
+  .action-end-date { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--ink); }
+  .action-end-date input { min-height: 44px; border: 0; border-radius: 12px; background: var(--surface); color: var(--ink); padding: 0 10px; }
+  .action-end-date small { color: var(--muted); font-size: 11px; }
   .story-day-menu [role='checkbox'] { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-height: 44px; padding: 10px; border-radius: 13px; border: 0; color: var(--ink); background: var(--surface-soft); font-size: 12px; }
   .story-day-menu [aria-checked='true'] { background: var(--accent-soft); color: var(--accent); }
   .story-day-menu [role='checkbox']:disabled { opacity: 1; cursor: default; }

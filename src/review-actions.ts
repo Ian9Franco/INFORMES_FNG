@@ -41,6 +41,23 @@ export function validCustomAction(value: unknown): value is CustomAction {
   return typeof item.id === 'string' && /^custom\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(item.id) && typeof item.label === 'string' && item.label === item.label.trim() && item.label.length >= 2 && item.label.length <= 80 && ['meta_ads', 'google_ads'].includes(item.platform) && (item.service === undefined || ['meta_ads','google_ads','meta_organic'].includes(item.service) && serviceProvider(item.service) === item.platform) && (item.scope === 'general' ? item.clientId === undefined : item.scope === 'client' && typeof item.clientId === 'string' && Boolean(item.clientId))
 }
 export const isScheduledAction = (id: string) => id === 'meta.story.scheduled' || id === 'meta.post.scheduled'
+export const CREATED_WITH_END_DATE = new Set(['meta.ad.created', 'meta.adset.created', 'meta.campaign.created', 'google.ad.created', 'google.adgroup.created', 'google.campaign.created'])
+export type StoryDayCount = { day: StoryDay; quantity: number }
+export function validCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+}
+/** «3 para sábado y 2 para domingo». Weekday order, never an invented split. */
+export function formatDayQuantities(counts: readonly StoryDayCount[]): string {
+  const parts = STORY_DAYS.flatMap(day => {
+    const found = counts.find(item => item.day === day.id)
+    return found ? [`${found.quantity} para ${day.label}`] : []
+  })
+  if (parts.length < 2) return parts[0] ?? ''
+  return `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}`
+}
 export const availableCustomActions = (catalog: CustomAction[], clientId?: string) => catalog.filter(item => validCustomAction(item) && (item.scope === 'general' || item.clientId === clientId))
 export type ReviewAction = {
   id: string
@@ -50,6 +67,10 @@ export type ReviewAction = {
   evidence: 'user_confirmed' | 'observed'
   sourceEventId?: string
   scheduledDays?: StoryDay[]
+  /** Per-day story quantities. Absent on older records, which only know the combined total. */
+  storyCounts?: StoryDayCount[]
+  /** Optional last active day for a created ad, ad set or campaign. */
+  endsOn?: string
   /** Snapshot keeps historical reports readable independently of the catalog. */
   customDefinition?: CustomAction
 }
@@ -70,6 +91,21 @@ export function validReviewActions(value: unknown): value is ReviewAction[] {
     if (isScheduledAction(item.typeId)) {
       if (!Array.isArray(item.scheduledDays) || !item.scheduledDays.length || item.scheduledDays.length > 7 || new Set(item.scheduledDays).size !== item.scheduledDays.length || item.scheduledDays.some((day: unknown) => !STORY_DAYS.some(option => option.id === day))) return false
     } else if (item.scheduledDays !== undefined) return false
+    if (item.storyCounts !== undefined) {
+      const counts: unknown[] = Array.isArray(item.storyCounts) ? item.storyCounts : []
+      if (item.typeId !== 'meta.story.scheduled' || !Array.isArray(item.storyCounts) || counts.length !== item.scheduledDays?.length || counts.length > 7) return false
+      const seen = new Set<string>()
+      const quantities = counts.map(part => {
+        if (!part || typeof part !== 'object') return 0
+        const day = 'day' in part ? part.day : undefined
+        const quantity = 'quantity' in part ? part.quantity : undefined
+        if (typeof day !== 'string' || typeof quantity !== 'number' || seen.has(day) || !item.scheduledDays!.includes(day as StoryDay) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 999) return 0
+        seen.add(day)
+        return quantity
+      })
+      if (seen.size !== counts.length || quantities.some(quantity => quantity < 1) || quantities.reduce((sum, quantity) => sum + quantity, 0) !== item.quantity) return false
+    }
+    if (item.endsOn !== undefined && (!CREATED_WITH_END_DATE.has(item.typeId) || typeof item.endsOn !== 'string' || !validCalendarDate(item.endsOn))) return false
     ids.add(item.id); types.add(item.typeId)
     return true
   })
@@ -79,13 +115,24 @@ export function describeReviewActions(review: { actions: string; actionEntries?:
   const entries = validReviewActions(review.actionEntries) ? review.actionEntries : []
   const lines = entries.map(item => {
     const definition = entryDefinition(item)!
-    const scheduled = isScheduledAction(item.typeId) ? ` · para ${STORY_DAYS.filter(day => item.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')}` : ''
-    return `${serviceLabel(definitionService(definition))} · ${definition.label}: ${item.quantity}${scheduled}${item.evidence === 'observed' ? ' (por confirmar)' : ''}`
+    const scheduled = item.storyCounts?.length ? `: ${formatDayQuantities(item.storyCounts)}` : isScheduledAction(item.typeId) ? `: ${item.quantity} · para ${STORY_DAYS.filter(day => item.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')}` : `: ${item.quantity}`
+    const until = item.endsOn ? `, hasta el ${item.endsOn.split('-').reverse().join('/')}` : ''
+    return `${serviceLabel(definitionService(definition))} · ${definition.label}${scheduled}${until}${item.evidence === 'observed' ? ' (por confirmar)' : ''}`
   })
   return [...lines, review.actions].filter(Boolean).join('\n')
 }
 
 export function storyDaysLabel(reviews: { actionEntries?: ReviewAction[] }[], short = true, typeId = 'meta.story.scheduled') {
-  const selected = new Set(reviews.flatMap(review => (review.actionEntries ?? []).filter(entry => entry.typeId === typeId).flatMap(entry => entry.scheduledDays ?? [])))
-  return STORY_DAYS.filter(day => selected.has(day.id)).map(day => short ? day.short : day.label).join(' · ')
+  const entries = reviews.flatMap(review => (review.actionEntries ?? []).filter(entry => entry.typeId === typeId))
+  const counted = entries.length > 0 && entries.every(entry => entry.storyCounts?.length)
+  const totals = new Map<StoryDay, number>()
+  for (const entry of entries) {
+    if (counted) for (const part of entry.storyCounts ?? []) totals.set(part.day, (totals.get(part.day) ?? 0) + part.quantity)
+    else for (const day of entry.scheduledDays ?? []) totals.set(day, 0)
+  }
+  return STORY_DAYS.filter(day => totals.has(day.id)).map(day => {
+    const name = short ? day.short : day.label
+    const quantity = totals.get(day.id) ?? 0
+    return counted && quantity > 0 ? `${name} ${quantity}` : name
+  }).join(' · ')
 }

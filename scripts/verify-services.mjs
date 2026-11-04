@@ -28,7 +28,7 @@ const sockets=new Set(),writes=[],errors=[]
 const resume=process.argv[6]??''
 const reportsOnly=['reports','density','monthly','pause'].includes(resume)
 if(resume)rows.set('review:confirmed-a',row('review','confirmed-a',{id:'confirmed-a',clientId:'a',platform:'meta_ads',service:'meta_ads',date:today,createdAt:`${today}T12:00:00Z`,actions:'',observations:'',actionSchemaVersion:1,actionEntries:[],issues:[{type:'no_budget',detail:'Esperando recarga'}]}))
-if(reportsOnly)for(const [id,clientId,service,entries] of [['confirmed-a','a','meta_ads',[action('meta.ad.created',2),action('meta.campaign.created')]],['post-b','b','meta_organic',[action('meta.post.scheduled',1,{scheduledDays:['sat','sun']})]],['google-b','b','google_ads',[action('google.keyword.updated',3)]]])rows.set(`review:${id}`,row('review',id,{id,clientId,platform:service==='google_ads'?'google_ads':'meta_ads',service,date:today,createdAt:`${today}T12:00:00Z`,actions:id==='google-b'?'Revisé términos de búsqueda':'',observations:id==='google-b'?'Conviene bajar la puja del finde':'',actionSchemaVersion:1,actionEntries:entries,issues:clientId==='a'?[{type:'error',detail:'Pago rechazado'}]:[]}))
+if(reportsOnly)for(const [id,clientId,service,entries] of [['confirmed-a','a','meta_ads',[action('meta.ad.created',2),action('meta.campaign.created',1,{endsOn:'2026-12-24'})]],['post-b','b','meta_organic',[action('meta.post.scheduled',1,{scheduledDays:['sat','sun']}),action('meta.story.scheduled',5,{scheduledDays:['sat','sun'],storyCounts:[{day:'sat',quantity:3},{day:'sun',quantity:2}]})]],['google-b','b','google_ads',[action('google.keyword.updated',3)]]])rows.set(`review:${id}`,row('review',id,{id,clientId,platform:service==='google_ads'?'google_ads':'meta_ads',service,date:today,createdAt:`${today}T12:00:00Z`,actions:id==='google-b'?'Revisé términos de búsqueda':'',observations:id==='google-b'?'Conviene bajar la puja del finde':'',actionSchemaVersion:1,actionEntries:entries,issues:clientId==='a'?[{type:'error',detail:'Pago rechazado'}]:[]}))
 if(resume==='pause')rows.get('review:confirmed-a').payload.issues=[{type:'client_paused',detail:'Hasta nuevo aviso'}]
 if(resume==='density')for(let i=0;i<37;i++) {
   const id=`fixture-${i}`;rows.set(`client:${id}`,row('client',id,{id,name:`CLIENTE ${String(i+1).padStart(2,'0')}`,active:true,services:i<27?['meta_ads']:['meta_ads','google_ads','meta_organic']}))
@@ -131,16 +131,29 @@ try {
   await pc.page.getByLabel('Cantidad: Añadí anuncios',{exact:true}).fill('2')
   await pc.page.getByRole('button',{name:'Más acciones · personalizar favoritas',exact:true}).click()
   await pc.page.locator('.available-action-tags button[data-action-type-id="meta.campaign.created"]').click()
+  await pc.page.locator('.selected-action[data-action-type-id="meta.campaign.created"] input[type="date"]').fill('2026-12-24')
   await save(pc.page)
   await phone.page.waitForFunction(()=>document.querySelector('.review-item[data-client-id="a"] .review-name small')?.textContent.includes('Pago rechazado'))
   assert.equal(writes.filter(w=>w.kind==='condition').length,0,'Derived metadata must never echo as client writes')
   console.log('Issue edit, scoped actions and derived-metadata no-echo passed')
   await reviewRow(pc.page,'b','meta_organic').locator('.quick-register').click()
+  await pc.page.locator('.available-action-tags button[data-action-type-id="meta.story.scheduled"]').click()
+  await pc.page.locator('.story-day-trigger').click()
+  const stories=pc.page.getByRole('dialog',{name:'Cuántas historias para cada día',exact:true})
+  const todayName=new Intl.DateTimeFormat('es-AR',{weekday:'long',timeZone:'America/Argentina/Buenos_Aires'}).format(new Date())
+  for(const [day,amount] of [['sábado','3'],['domingo','2']]) {
+    await stories.getByRole('checkbox',{name:day,exact:true}).click()
+    await stories.getByLabel(`Cantidad para ${day}`,{exact:true}).fill(amount)
+  }
+  if(todayName!=='sábado'&&todayName!=='domingo')await stories.getByRole('checkbox',{name:todayName,exact:true}).click()
+  await stories.getByRole('button',{name:'Listo',exact:true}).click()
+  assert.match(await pc.page.locator('.story-day-trigger').innerText(),/3 para sábado y 2 para domingo/)
+  assert.match(await pc.page.locator('.story-total').innerText(),/5 historias/)
   assert.equal(await pc.page.locator('.available-action-tags button[data-action-type-id="meta.ad.created"]').count(),0)
   assert.equal(await pc.page.getByRole('button',{name:'Sin presupuesto',exact:true}).count(),0,'Organic is not a paid budget workflow')
   assert.equal(await pc.page.getByRole('button',{name:'Campañas apagadas',exact:true}).count(),0,'Campaign pauses do not apply to organic publishing')
   await pc.page.locator('.available-action-tags button[data-action-type-id="meta.post.scheduled"]').click()
-  await pc.page.locator('.story-day-trigger').click()
+  await pc.page.locator('.selected-action[data-action-type-id="meta.post.scheduled"] .story-day-trigger').click()
   const menu=pc.page.getByRole('dialog',{name:'Días de la publicación programada',exact:true})
   for(const day of ['sábado','domingo'])if(await menu.getByRole('checkbox',{name:day,exact:true}).getAttribute('aria-checked')!=='true')await menu.getByRole('checkbox',{name:day,exact:true}).click()
   for(const day of ['lunes','martes','miércoles','jueves','viernes'])if(await menu.getByRole('checkbox',{name:day,exact:true}).getAttribute('aria-checked')==='true')await menu.getByRole('checkbox',{name:day,exact:true}).click()
@@ -174,8 +187,8 @@ try {
   } else {
   let simple=pc.page.locator('.report-preview-wrap .report-grid')
   await simple.waitFor();assert.match(await simple.innerText(),/2 anuncios añadidos/);assert.match(await simple.innerText(),/1 campaña creada/)
-  assert.match(await simple.innerText(),/3 palabras clave actualizadas/);assert.match(await simple.innerText(),/1 publicación programada para sábado, domingo/);assert.match(await simple.innerText(),resume==='pause'?/Campañas apagadas por decisión del cliente/:/Con error/)
-  assert.match(await simple.innerText(),/Nota/);assert.match(await simple.innerText(),/Revisé términos de búsqueda/);assert.match(await simple.innerText(),/Observación/);assert.match(await simple.innerText(),/Conviene bajar la puja del finde/)
+  assert.match(await simple.innerText(),/3 palabras clave actualizadas/);assert.match(await simple.innerText(),/1 publicación programada para sábado, domingo/);assert.match(await simple.innerText(),/5 historias: 3 para sábado y 2 para domingo/);assert.match(await simple.innerText(),/hasta el 24\/12\/2026/);assert.match(await simple.innerText(),resume==='pause'?/Campañas apagadas por decisión del cliente/:/Con error/)
+  if(reportsOnly){assert.match(await simple.innerText(),/Nota/);assert.match(await simple.innerText(),/Revisé términos de búsqueda/);assert.match(await simple.innerText(),/Observación/);assert.match(await simple.innerText(),/Conviene bajar la puja del finde/)}
   await simple.screenshot({path:`${output}/services-simple-week.png`})
   await pc.page.pdf({path:`${output}/services-simple-week.pdf`,preferCSSPageSize:true,printBackground:true})
   assert.equal((await PDFDocument.load(await readFile(`${output}/services-simple-week.pdf`))).getPageCount(),1)
@@ -188,7 +201,8 @@ try {
   const detail=pc.page.locator('.detail-preview-pages');await detail.waitFor()
   await detail.screenshot({path:`${output}/services-detailed-week.png`})
   assert.match(await detail.innerText(),resume==='pause'?/Revisado · Campañas apagadas por decisión del cliente/:/Pago rechazado/);assert.match(await detail.innerText(),/Meta orgánico/);assert.match(await detail.innerText(),/2 anuncios añadidos/)
-  assert.match(await detail.innerText(),/Nota/);assert.match(await detail.innerText(),/Observación/);assert.match(await detail.innerText(),/Conviene bajar la puja del finde/)
+  assert.match(await detail.innerText(),/Nota/)
+  if(reportsOnly){assert.match(await detail.innerText(),/Observación/);assert.match(await detail.innerText(),/Conviene bajar la puja del finde/)}
   await pc.page.pdf({path:`${output}/services-detailed-week.pdf`,preferCSSPageSize:true,printBackground:true})
   await pc.page.locator('.report-mode').getByRole('button',{name:/^Simple/}).click()
   await pc.page.getByRole('button',{name:'Histórico mensual',exact:true}).click();await pc.page.waitForTimeout(700)
