@@ -34,13 +34,20 @@ test('isolated PostgreSQL: CAS, RLS, account matching, event deduplication and l
     await write([storyReview])
     assert.deepEqual((await db.query("select payload->'actionEntries'->0->'scheduledDays' as days from public.fng_records where kind='review'")).rows[0].days,['mon','thu'])
     for(const scheduledDays of [[],['bad'],['mon','mon'],[1],[null]]) await assert.rejects(write([{...storyReview,expectedVersion:4,payload:{...storyReview.payload,actionEntries:[{...story,scheduledDays}]}}]),/Días programados/)
-    await assert.rejects(write([{...storyReview,expectedVersion:4,payload:{...storyReview.payload,actionEntries:[{...story,quantity:0}]}}]),/Acción inválida/)
+    const counted={...story,quantity:5,scheduledDays:['sat','sun'],storyCounts:[{day:'sat',quantity:3},{day:'sun',quantity:2}]}
+    await write([{...storyReview,expectedVersion:4,payload:{...storyReview.payload,actionEntries:[counted]}}])
+    await assert.rejects(write([{...storyReview,expectedVersion:5,payload:{...storyReview.payload,actionEntries:[{...counted,quantity:4}]}}]),/no coincide con el reparto/)
+    const ending={id:'camp',typeId:'meta.campaign.created',quantity:1,source:'manual',evidence:'user_confirmed',endsOn:'2026-12-24'}
+    await write([{...storyReview,expectedVersion:5,payload:{...storyReview.payload,actionEntries:[ending]}}])
+    await assert.rejects(write([{...storyReview,expectedVersion:6,payload:{...storyReview.payload,actionEntries:[{...ending,endsOn:'2026-02-31'}]}}]),/Fecha de fin/)
+    await assert.rejects(write([{...storyReview,expectedVersion:6,payload:{...storyReview.payload,actionEntries:[{...story,endsOn:'2026-12-24'}]}}]),/Fecha de fin/)
+    await assert.rejects(write([{...storyReview,expectedVersion:6,payload:{...storyReview.payload,actionEntries:[{...story,quantity:0}]}}]),/Acción inválida/)
     const definition={id:'custom.00000000-0000-4000-8000-000000000003',label:'Actualicé catálogo',platform:'meta_ads',scope:'client',clientId:'c'}
     const custom={...story,id:'custom-entry',typeId:definition.id,customDefinition:definition}; delete custom.scheduledDays
-    const customReview={...storyReview,expectedVersion:4,payload:{...storyReview.payload,actionEntries:[custom,{...story,id:'post',typeId:'meta.post.scheduled'}]}}
+    const customReview={...storyReview,expectedVersion:6,payload:{...storyReview.payload,actionEntries:[custom,{...story,id:'post',typeId:'meta.post.scheduled'}]}}
     // Reversed order must still create the definition before the review.
     await write([customReview,{kind:'action',id:definition.id,expectedVersion:0,payload:definition}])
-    await assert.rejects(write([{...customReview,expectedVersion:5,payload:{...customReview.payload,actionEntries:[{...custom,customDefinition:{...definition,label:'Alterada'}}]}}]),/alterada/)
+    await assert.rejects(write([{...customReview,expectedVersion:7,payload:{...customReview.payload,actionEntries:[{...custom,customDefinition:{...definition,label:'Alterada'}}]}}]),/alterada/)
     await assert.rejects(write([{kind:'action',id:definition.id,expectedVersion:1,payload:{...definition,scope:'general'}}]),/general|inmutables/)
     await assert.rejects(write([{kind:'action',id:definition.id,expectedVersion:1,payload:definition,deleted:true}]),/historial/)
     const secondClient={...client,id:'d',payload:{id:'d',name:'OTRO',active:true}}
@@ -50,7 +57,7 @@ test('isolated PostgreSQL: CAS, RLS, account matching, event deduplication and l
     const general={...definition,id:'custom.00000000-0000-4000-8000-000000000004',scope:'general'}; delete general.clientId
     const generalEntry={...custom,typeId:general.id,customDefinition:general}
     await write([{...otherReview,payload:{...otherReview.payload,actionEntries:[generalEntry]}},{kind:'action',id:general.id,expectedVersion:0,payload:general}])
-    await write([{...customReview,expectedVersion:5,payload:{...customReview.payload,actionEntries:[generalEntry]}}])
+    await write([{...customReview,expectedVersion:7,payload:{...customReview.payload,actionEntries:[generalEntry]}}])
     await assert.rejects(write([{kind:'action',id:'custom.00000000-0000-4000-8000-000000000005',expectedVersion:0,payload:{...general,id:'custom.00000000-0000-4000-8000-000000000005'}}]),/unique/)
     const events=[{id:'00000000-0000-4000-8000-000000000999',platform:'meta_ads',accountCandidate:'987654321',startedAt:new Date(Date.now()-600000).toISOString(),endedAt:new Date().toISOString(),focusedMs:600000,navigationSignals:4}]
     await db.query('select public.fng_ingest_activity($1::jsonb)',[JSON.stringify(events)])
