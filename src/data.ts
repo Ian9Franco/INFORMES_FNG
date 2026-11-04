@@ -18,3 +18,12 @@ export const date=(s:string)=>new Date(s+'T12:00:00')
 export function monday(d:Date) { const x=new Date(d.getFullYear(),d.getMonth(),d.getDate(),12); x.setDate(x.getDate()-(x.getDay()+6)%7); return keyDate(x) }
 export function weekDays(s:string){ const d=date(s); return Array.from({length:6},(_,i)=>{const x=new Date(d);x.setDate(x.getDate()+i);return keyDate(x)}) }
 export const format=(s:string)=>date(s).toLocaleDateString('es-AR',{day:'2-digit',month:'short'})
+const monthName = (value: Date) => new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(value)
+/** A readable span for the report masthead, not the abbreviated table dates. */
+export function reportSpanLabel(month: string | undefined, days: readonly string[]): string {
+  if (month) return new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(date(`${month}-01`))
+  const start = date(days[0])
+  const end = date(days[days.length - 1])
+  if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) return `${start.getDate()} al ${end.getDate()} de ${monthName(end)} de ${end.getFullYear()}`
+  return `${start.getDate()} de ${monthName(start)} al ${end.getDate()} de ${monthName(end)} de ${end.getFullYear()}`
+}
