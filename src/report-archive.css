@@ -3,6 +3,6 @@
 .report-archive-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .report-archive-month { display: grid; gap: 8px; margin-top: 6px; }
 .report-archive-weeks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.report-archive-weeks li { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.report-archive-weeks li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12px; }
 .report-archive-weeks b { font-weight: 550; color: var(--muted); }
 .report-archive-weeks b.is-ready { color: var(--accent); }
