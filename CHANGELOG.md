@@ -4,6 +4,9 @@ Se documentan cambios funcionales y técnicos relevantes siguiendo el formato [K
 
 ## [Unreleased] — mejoras continuas
 
+### Seguimiento de incidencias
+- Lectura longitudinal de los problemas ya guardados en las revisiones: un mismo aviso repetido varios días es un episodio, con primera y última observación, y sólo se cierra si alguien lo destilda y guarda. Una pausa pedida por el cliente no cuenta como error. El registro, la base y los informes quedan igual. Contrato en [docs/INCIDENCIAS_CONTRATO.md](docs/INCIDENCIAS_CONTRATO.md).
+
 ### Interfaz operativa
 - Al terminar un mes, si cada semana tiene su PDF simple y detallado en la carpeta, se puede crear el resumen mensual y después borrar esas semanas. Quedan un simple y un detallado por mes. La carpeta inicial es `\\Barton-8000\fanger\Users\IanP\informes` y se puede cambiar.
 - Encabezado de los informes en Inter, con el título y la fecha en peso medio y la guía de lectura en redonda. La negrita queda para «Cómo se lee» y para el nombre de cada plataforma. El período se escribe «2 al 7 de noviembre de 2026».

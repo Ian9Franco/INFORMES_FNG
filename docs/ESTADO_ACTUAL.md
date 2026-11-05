@@ -1,6 +1,7 @@
 # Estado actual — Informes FNG
 
 **Corte documental vigente:** 2026-10-15.
+**Actualización 2026-11-05:** hay un contrato derivado y con pruebas para leer episodios de incidencias (`src/incident-episodes.ts`, [contrato](INCIDENCIAS_CONTRATO.md)). El formulario, `kind='condition'`, la sincronización y los informes Simple/Detallado siguen igual. El [issue #8](https://github.com/Ian9Franco/INFORMES_FNG/issues/8) no está cerrado.
 **Repositorio:** [Ian9Franco/INFORMES_FNG](https://github.com/Ian9Franco/INFORMES_FNG)  
 **Implementación actual:** rama `main`; el [PR fundacional #1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1) ya fue fusionado.
 **Madurez:** MVP personal en desarrollo. Las pruebas automatizadas no sustituyen la validación humana de producción/dispositivos físicos.
