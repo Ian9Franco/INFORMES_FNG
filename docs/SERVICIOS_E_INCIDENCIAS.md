@@ -52,3 +52,5 @@ Las incidencias viajan en el mismo registro de revisión y por el mismo lote inc
 El estado se carga junto con la metadata existente, por lo que no añade polling ni consultas individuales por cliente. Así una alerta del mes anterior sigue visible en otro navegador sin descargar todos los meses. Realtime comunica revisiones y estado derivado. La caché conserva esta metadata, pero no la reenvía ni permite importarla como autoridad. Sólo el trigger de revisión puede modificarla; se conserva RLS por usuario y CAS para las revisiones.
 
 Antes de usar este código contra una DB, aplicar la migración `work_services_and_review_issues`. No contiene IDs reales ni backfill del historial. Companion también debe actualizarse: distingue Ads Manager (`meta_ads`) del calendario/compositor confirmado (`meta_organic`), respeta los servicios activos del catálogo privado y continúa sin observar otros sitios ni afirmar cambios realizados.
+
+La lectura longitudinal (un problema repetido no es un problema nuevo por día; la pausa del cliente no es un error) está definida en [el contrato de incidencias](INCIDENCIAS_CONTRATO.md). Todavía no cambia esta pantalla ni la fila `condition`.

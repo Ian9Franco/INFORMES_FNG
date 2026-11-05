@@ -1,6 +1,7 @@
 # Backlog — Informes FNG
 
 **Actualizado:** 2026-10-13. Seguimiento inicial para el [PR #1](https://github.com/Ian9Franco/INFORMES_FNG/pull/1).  
+**Anexo 2026-11-05:** cortes del issue #8, al final. El resto de los estados no se reauditó en ese anexo.  
 **Prioridades:** P0 = bloquea uso confiable/merge; P1 = mejora necesaria para flujo diario; P2 = expansión.  
 **Estados:** Hecho / En verificación / Pendiente / Diferido. Los criterios de aceptación son condiciones comprobables, no promesas.
 
@@ -72,4 +73,17 @@
 | FNG-035 | P1 | Pendiente | Separar sesiones observadas de hechos confirmados | Nunca reportar la visita como trabajo o cambio verificado automáticamente |
 
 **Dependencias:** primero resolver `FNG-004/005/010/014` (sincronización, conflictos y esquema); luego `FNG-026/027/028`; después sugerencias y notificaciones.
+
+## Seguimiento operativo y rendimiento — issue #8
+
+Plan en [el issue #8](https://github.com/Ian9Franco/INFORMES_FNG/issues/8). Estas filas no cierran las tareas de más arriba: `FNG-011`, `FNG-012`, `FNG-014`, `FNG-015`, `FNG-023`, `FNG-024`, `FNG-026`, `FNG-027` y `FNG-034` siguen en su estado anterior.
+
+| ID | Prioridad | Estado | Tarea | Criterio de aceptación |
+| --- | --- | --- | --- | --- |
+| FNG-036 | P1 | Hecho | Contrato de episodios, compatible con `condition` | Misma advertencia en varios días = un episodio; la resolución manual queda auditada; la pausa no es un error; el registro actual no cambia. Evidencia: `src/incident-episodes.ts` y `tests/incident-episodes.test.mjs` |
+| FNG-037 | P1 | Pendiente | Persistir y mostrar el seguimiento | Diagnóstico, estado y resolución con los mismos hábitos de revisión, sin borrar historial ni crear pendientes solos |
+| FNG-038 | P1 | Pendiente | Snapshots de KPI y comparación de períodos equivalentes | Ratios desde totales, sin inventar faltantes ni mezclar moneda, cuenta o plataforma |
+| FNG-039 | P1 | Pendiente | CSV idempotente de Meta Ads y Google Ads | Reimportar no duplica; las filas inválidas se informan; sin datos reales de clientes |
+| FNG-040 | P1 | Pendiente | Simple y Detallado con incidencias y rendimiento | El simple sigue legible en A4; el detallado separa el resumen del historial diario |
+| FNG-041 | P2 | Diferido | Conectores de sólo lectura y alertas pasivas | Después de datos fiables. No modifican campañas ni dependen de Companion |
 

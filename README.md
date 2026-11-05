@@ -11,6 +11,7 @@ Los trabajos se separan en **Meta Ads, Google Ads y Meta orgánico (historias/fe
 | Documento | Para qué sirve |
 | --- | --- |
 | [Estado actual](docs/ESTADO_ACTUAL.md) | Inventario verificable de lo implementado, lo parcial y lo que falta |
+| [Contrato de incidencias](docs/INCIDENCIAS_CONTRATO.md) | Cómo se lee un problema a lo largo del tiempo sin duplicarlo ni cambiar el registro |
 | [Administrar clientes](docs/ADMINISTRAR_CLIENTES.md) | Altas/bajas y cuentas exclusivamente desde Supabase; privacidad y contextos de Companion |
 | [Changelog](CHANGELOG.md) | Evolución y cambios ya introducidos |
 | [Backlog](docs/BACKLOG.md) | Tareas priorizadas con criterios de aceptación |

@@ -62,3 +62,7 @@ La arquitectura inicial sigue válida para el registro manual. La expansión se 
 
 **No usar Meta/Google Marketing APIs para rastrear sesiones.** Posible enriquecimiento DOM solo tras evaluación de autorización, fiabilidad y privacidad. Foco principal: ayudar a documentar, no fiscalizar campañas.
 
+## Incidencias longitudinales y rendimiento
+
+El [issue #8](https://github.com/Ian9Franco/INFORMES_FNG/issues/8) se entrega en cortes chicos. El primero, el [contrato de episodios](INCIDENCIAS_CONTRATO.md), ya está derivado de las revisiones actuales y no cambia el registro. Después van la persistencia visible, los KPI con pruebas, el CSV y recién entonces los informes. Los conectores de Meta y Google, y las alertas, quedan para cuando haya datos fiables. No se empieza por una API ni por un agente que edite campañas.
+
