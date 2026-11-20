@@ -31,14 +31,14 @@ export function readerActionText(entry: ReviewAction, registeredDate?: string): 
   if (entry.typeId === 'meta.story.scheduled' && entry.storyCounts?.length) {
     const split = formatDayQuantities(entry.storyCounts)
     const noun = entry.quantity === 1 ? 'historia' : 'historias'
-    return `${entry.quantity} ${noun}: ${split}${noted}${pending}`
+    return `${entry.quantity} ${noun}: ${split}${formatItemTitles(entry.itemTitles)}${noted}${pending}`
   }
   if (isScheduledAction(entry.typeId)) {
     const days = STORY_DAYS.filter(day => entry.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')
     const noun = entry.typeId === 'meta.story.scheduled'
       ? entry.quantity === 1 ? 'historia programada' : 'historias programadas'
       : entry.quantity === 1 ? 'publicación programada' : 'publicaciones programadas'
-    return `${entry.quantity} ${noun} para ${days}${noted}${pending}`
+    return `${entry.quantity} ${noun} para ${days}${formatItemTitles(entry.itemTitles)}${noted}${pending}`
   }
   const pair = READER_PHRASES[entry.typeId]
   const phrase = pair
@@ -67,12 +67,17 @@ export function reportActionGroups(reviews: Review[]): ReportActionGroup[] {
         const total = items.reduce((sum, item) => sum + (item.entry.storyCounts?.find(part => part.day === day.id)?.quantity ?? 0), 0)
         return total ? [{ day: day.id, quantity: total }] : []
       }) : undefined
+      const itemTitles = items.reduce<string[]>((acc, item) => {
+        for (const title of item.entry.itemTitles ?? []) if (!acc.includes(title)) acc.push(title)
+        return acc
+      }, [])
       const sample: ReviewAction = {
         ...items[0].entry,
         quantity: storyCounts ? storyCounts.reduce((sum, part) => sum + part.quantity, 0) : quantity,
         evidence: pending ? 'observed' : 'user_confirmed',
         ...(isScheduledAction(items[0].entry.typeId) ? { scheduledDays: storyCounts ? storyCounts.map(part => part.day) : STORY_DAYS.filter(day => items.some(item => item.entry.scheduledDays?.includes(day.id))).map(day => day.id) } : {}),
         ...(storyCounts ? { storyCounts } : { storyCounts: undefined }),
+        itemTitles: itemTitles.length ? itemTitles : undefined,
       }
       return { key, text: readerActionText(sample, isScheduledAction(sample.typeId) ? items[0].date : undefined), pending }
     })
