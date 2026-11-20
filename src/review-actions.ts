@@ -42,6 +42,16 @@ export function validCustomAction(value: unknown): value is CustomAction {
 }
 export const isScheduledAction = (id: string) => id === 'meta.story.scheduled' || id === 'meta.post.scheduled'
 export const CREATED_WITH_END_DATE = new Set(['meta.ad.created', 'meta.adset.created', 'meta.campaign.created', 'google.ad.created', 'google.adgroup.created', 'google.campaign.created'])
+/** Optional names for ads, scheduled stories and scheduled posts. */
+export const ITEM_TITLED_ACTIONS = new Set(['meta.ad.created', 'google.ad.created', 'meta.story.scheduled', 'meta.post.scheduled'])
+export function itemTitleLabel(typeId: string, quantity: number): string {
+  const noun = typeId === 'meta.story.scheduled' ? 'historia' : typeId === 'meta.post.scheduled' ? 'publicación' : 'anuncio'
+  return quantity === 1 ? `Título del ${noun}` : `Títulos del ${noun}`
+}
+export function formatItemTitles(titles: readonly string[] | undefined): string {
+  const items = titles?.map(title => title.trim()).filter(Boolean) ?? []
+  return items.length ? ` · ${items.join(', ')}` : ''
+}
 export type StoryDayCount = { day: StoryDay; quantity: number }
 export function validCalendarDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
@@ -71,6 +81,8 @@ export type ReviewAction = {
   storyCounts?: StoryDayCount[]
   /** Optional last active day for a created ad, ad set or campaign. */
   endsOn?: string
+  /** Optional titles for created ads, scheduled stories or posts. At most one per quantity unit. */
+  itemTitles?: string[]
   /** Snapshot keeps historical reports readable independently of the catalog. */
   customDefinition?: CustomAction
 }
@@ -106,6 +118,11 @@ export function validReviewActions(value: unknown): value is ReviewAction[] {
       if (seen.size !== counts.length || quantities.some(quantity => quantity < 1) || quantities.reduce((sum, quantity) => sum + quantity, 0) !== item.quantity) return false
     }
     if (item.endsOn !== undefined && (!CREATED_WITH_END_DATE.has(item.typeId) || typeof item.endsOn !== 'string' || !validCalendarDate(item.endsOn))) return false
+    if (item.itemTitles !== undefined) {
+      if (!ITEM_TITLED_ACTIONS.has(item.typeId) || !Array.isArray(item.itemTitles) || !item.itemTitles.length || item.itemTitles.length > item.quantity) return false
+      const titles = new Set<string>()
+      if (!item.itemTitles.every((title: unknown) => typeof title === 'string' && title === title.trim() && title.length >= 1 && title.length <= 80 && !titles.has(title) && titles.add(title))) return false
+    }
     ids.add(item.id); types.add(item.typeId)
     return true
   })
@@ -117,7 +134,8 @@ export function describeReviewActions(review: { actions: string; actionEntries?:
     const definition = entryDefinition(item)!
     const scheduled = item.storyCounts?.length ? `: ${formatDayQuantities(item.storyCounts)}` : isScheduledAction(item.typeId) ? `: ${item.quantity} · para ${STORY_DAYS.filter(day => item.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')}` : `: ${item.quantity}`
     const until = item.endsOn ? `, hasta el ${item.endsOn.split('-').reverse().join('/')}` : ''
-    return `${serviceLabel(definitionService(definition))} · ${definition.label}${scheduled}${until}${item.evidence === 'observed' ? ' (por confirmar)' : ''}`
+    const named = formatItemTitles(item.itemTitles)
+    return `${serviceLabel(definitionService(definition))} · ${definition.label}${scheduled}${named}${until}${item.evidence === 'observed' ? ' (por confirmar)' : ''}`
   })
   return [...lines, review.actions].filter(Boolean).join('\n')
 }
