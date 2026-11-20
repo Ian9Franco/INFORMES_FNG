@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { activePlatforms, platformActive, scopedReviews, togglePlatform } from '../src/platforms.ts'
 import { latestIssues, validReviewIssues, issueCellText, reviewConditionTone, conditionMark } from '../src/review-issues.ts'
-import { simpleActionSummary, simpleActionLegend, reportRemarks } from '../src/simple-report.ts'
+import { readerActionText, simpleActionSummary, simpleActionLegend, reportRemarks } from '../src/simple-report.ts'
 import { compactReviewText } from '../src/report-layout.ts'
 import { dailyRequired, mandatoryDayReady, weeklyServiceProgress } from '../src/service-cadence.ts'
 import { activeReportStore } from '../src/report-export.ts'
@@ -110,6 +110,19 @@ test('client-requested campaign pause is neutral, persistent and independent of 
   assert.deepEqual(latestIssues([review('meta_ads',{date:'2026-10-02',issues:[]})],'c','meta_ads','2026-10-03',states),[])
   const report=activeReportStore({clients:[client],reviews:[paused],pending:[],closed:[]})
   assert.equal(report.clients.length,1);assert.equal(report.reviews.length,1)
+})
+
+test('reader-facing summaries include optional action titles for ads, stories and posts',()=>{
+  const ad=action('meta.ad.created',2,{itemTitles:['Promo invierno','Retargeting']})
+  assert.match(readerActionText(ad),/Promo invierno, Retargeting/)
+  const story=action('meta.story.scheduled',2,{scheduledDays:['sat','sun'],itemTitles:['Lanzamiento','Cierre']})
+  assert.match(readerActionText(story),/Lanzamiento, Cierre/)
+  const split=action('meta.story.scheduled',5,{scheduledDays:['sun','sat'],storyCounts:[{day:'sat',quantity:3},{day:'sun',quantity:2}],itemTitles:['Sáb A','Sáb B','Sáb C','Dom D','Dom E']})
+  assert.match(readerActionText(split),/Sáb A/)
+  const post=action('meta.post.scheduled',1,{scheduledDays:['mon'],itemTitles:['Oferta del mes']})
+  assert.match(readerActionText(post,'2026-10-16'),/Oferta del mes/)
+  const reviews=[review('meta_organic',{date:'2026-10-09',actionEntries:[action('meta.story.scheduled',1,{scheduledDays:['sat'],itemTitles:['Historia A']})]}),review('meta_organic',{date:'2026-10-09',actionEntries:[action('meta.story.scheduled',1,{scheduledDays:['sun'],itemTitles:['Historia B']})]})]
+  assert.match(simpleActionSummary(reviews).join('\n'),/Historia A, Historia B/)
 })
 
 test('programming is readable, keeps every registration date and never claims publication occurred',()=>{
