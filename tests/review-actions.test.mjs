@@ -45,6 +45,19 @@ test('scheduled stories carry explicit unique weekdays and render in canonical o
   assert.equal(storyDaysLabel([{actionEntries:[counted]}]),'Sáb 3 · Dom 2')
 })
 
+test('created ads, scheduled stories and posts can record optional titles', () => {
+  const ad = { ...manual, quantity: 2, itemTitles: ['Promo invierno', 'Retargeting'] }
+  assert.equal(validReviewActions([ad]), true)
+  assert.equal(validReviewActions([{ ...ad, itemTitles: ['Promo', 'Promo'] }]), false)
+  assert.equal(validReviewActions([{ ...ad, itemTitles: [...ad.itemTitles, 'Extra'] }]), false)
+  assert.equal(validReviewActions([{ ...manual, typeId: 'google.keyword.updated', itemTitles: ['KW'] }]), false)
+  const story = { ...manual, typeId: 'meta.story.scheduled', scheduledDays: ['fri'], itemTitles: ['Lanzamiento'] }
+  assert.match(describeReviewActions({ actions: '', actionEntries: [story] }), /Lanzamiento/)
+  const post = { ...manual, typeId: 'meta.post.scheduled', scheduledDays: ['mon'], quantity: 1, itemTitles: ['Oferta del mes'] }
+  assert.match(describeReviewActions({ actions: '', actionEntries: [ad] }), /Promo invierno/)
+  assert.match(describeReviewActions({ actions: '', actionEntries: [post] }), /Oferta del mes/)
+})
+
 test('a created ad, ad set or campaign can record an optional end date', () => {
   const campaign={...manual,typeId:'meta.campaign.created',quantity:1,endsOn:'2026-12-24'}
   assert.equal(validReviewActions([campaign]),true)

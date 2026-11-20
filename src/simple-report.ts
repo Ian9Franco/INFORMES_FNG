@@ -1,5 +1,5 @@
 import type { Review } from './data'
-import { entryDefinition, entryService, formatDayQuantities, isScheduledAction, STORY_DAYS, validReviewActions, type ReviewAction } from './review-actions.ts'
+import { entryDefinition, entryService, formatDayQuantities, formatItemTitles, isScheduledAction, STORY_DAYS, validReviewActions, type ReviewAction } from './review-actions.ts'
 import { serviceLabel, WORK_SERVICES, type WorkService } from './work-services.ts'
 
 /** Reader-facing phrases. The person who opens the report did not write it. */
@@ -45,7 +45,7 @@ export function readerActionText(entry: ReviewAction, registeredDate?: string): 
     ? `${entry.quantity} ${entry.quantity === 1 ? pair[0] : pair[1]}`
     : `${entry.quantity} · ${entryDefinition(entry)?.label ?? 'Trabajo registrado'}`
   const until = entry.endsOn ? `, hasta el ${entry.endsOn.split('-').reverse().join('/')}` : ''
-  return `${phrase}${until}${pending}`
+  return `${phrase}${formatItemTitles(entry.itemTitles)}${until}${pending}`
 }
 
 export type ReportActionTag = { key: string; text: string; pending: boolean }
