@@ -44,9 +44,21 @@ export const isScheduledAction = (id: string) => id === 'meta.story.scheduled' |
 export const CREATED_WITH_END_DATE = new Set(['meta.ad.created', 'meta.adset.created', 'meta.campaign.created', 'google.ad.created', 'google.adgroup.created', 'google.campaign.created'])
 /** Optional names for ads, scheduled stories and scheduled posts. */
 export const ITEM_TITLED_ACTIONS = new Set(['meta.ad.created', 'google.ad.created', 'meta.story.scheduled', 'meta.post.scheduled'])
-export function itemTitleLabel(typeId: string, quantity: number): string {
-  const noun = typeId === 'meta.story.scheduled' ? 'historia' : typeId === 'meta.post.scheduled' ? 'publicación' : 'anuncio'
-  return quantity === 1 ? `Título del ${noun}` : `Títulos del ${noun}`
+export const ITEM_TITLE_FIELD_MAX_LENGTH = 1000
+export const ITEM_TITLE_SEGMENT_MAX_LENGTH = 80
+export const ITEM_TITLE_MAX_COUNT = 40
+export function itemTitleLabel(typeId: string): string {
+  if (typeId === 'meta.story.scheduled') return 'Nombres de historias (opcional)'
+  if (typeId === 'meta.post.scheduled') return 'Nombres de publicaciones (opcional)'
+  return 'Nombres de anuncios (opcional)'
+}
+/** Split freeform input on commas or line breaks; trim; drop empties. */
+export function parseItemTitles(raw: string): string[] | undefined {
+  const titles = raw.split(/[,\r\n]+/).map(part => part.trim()).filter(Boolean)
+  return titles.length ? titles : undefined
+}
+export function itemTitlesToText(titles: readonly string[] | undefined): string {
+  return titles?.join('\n') ?? ''
 }
 export function formatItemTitles(titles: readonly string[] | undefined): string {
   const items = titles?.map(title => title.trim()).filter(Boolean) ?? []
@@ -81,7 +93,7 @@ export type ReviewAction = {
   storyCounts?: StoryDayCount[]
   /** Optional last active day for a created ad, ad set or campaign. */
   endsOn?: string
-  /** Optional titles for created ads, scheduled stories or posts. At most one per quantity unit. */
+  /** Optional titles for created ads, scheduled stories or posts. Count is independent of quantity. */
   itemTitles?: string[]
   /** Snapshot keeps historical reports readable independently of the catalog. */
   customDefinition?: CustomAction
@@ -119,9 +131,15 @@ export function validReviewActions(value: unknown): value is ReviewAction[] {
     }
     if (item.endsOn !== undefined && (!CREATED_WITH_END_DATE.has(item.typeId) || typeof item.endsOn !== 'string' || !validCalendarDate(item.endsOn))) return false
     if (item.itemTitles !== undefined) {
-      if (!ITEM_TITLED_ACTIONS.has(item.typeId) || !Array.isArray(item.itemTitles) || !item.itemTitles.length || item.itemTitles.length > item.quantity) return false
+      if (!ITEM_TITLED_ACTIONS.has(item.typeId) || !Array.isArray(item.itemTitles) || !item.itemTitles.length || item.itemTitles.length > ITEM_TITLE_MAX_COUNT) return false
       const titles = new Set<string>()
-      if (!item.itemTitles.every((title: unknown) => typeof title === 'string' && title === title.trim() && title.length >= 1 && title.length <= 80 && !titles.has(title) && titles.add(title))) return false
+      let totalLength = 0
+      if (!item.itemTitles.every((title: unknown) => {
+        if (typeof title !== 'string' || title !== title.trim() || title.length < 1 || title.length > ITEM_TITLE_SEGMENT_MAX_LENGTH || titles.has(title)) return false
+        titles.add(title)
+        totalLength += title.length
+        return totalLength <= ITEM_TITLE_FIELD_MAX_LENGTH
+      })) return false
     }
     ids.add(item.id); types.add(item.typeId)
     return true

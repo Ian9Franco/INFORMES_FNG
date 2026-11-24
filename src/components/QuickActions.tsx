@@ -5,7 +5,7 @@
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'motion/react'
 import { Minus, Plus, Star, X } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
-import { ACTION_TYPES, CREATED_WITH_END_DATE, ITEM_TITLED_ACTIONS, STORY_DAYS, actionDefinition, availableCustomActions, entryDefinition, definitionService, isScheduledAction, itemTitleLabel, todayStoryDay, type CustomAction, type ActionTypeId, type ReviewAction, type StoryDayCount } from '../review-actions'
+import { ACTION_TYPES, CREATED_WITH_END_DATE, ITEM_TITLED_ACTIONS, ITEM_TITLE_FIELD_MAX_LENGTH, STORY_DAYS, actionDefinition, availableCustomActions, entryDefinition, definitionService, isScheduledAction, itemTitleLabel, itemTitlesToText, parseItemTitles, todayStoryDay, type CustomAction, type ActionTypeId, type ReviewAction, type StoryDayCount } from '../review-actions'
 import { WORK_SERVICES, serviceLabel, type WorkService } from '../work-services'
 import StoryDayPicker from './StoryDayPicker'
 import CreateAction from './CreateAction'
@@ -48,15 +48,7 @@ export default function QuickActions({ value, onChange, compact = false, storage
   }
   function quantity(id: string, count: number) {
     if (!Number.isSafeInteger(count) || count < 1 || count > 999) return
-    onChange(value.map(item => {
-      if (item.id !== id) return item
-      const itemTitles = item.itemTitles?.slice(0, count)
-      return { ...item, quantity: count, ...(itemTitles?.length ? { itemTitles } : { itemTitles: undefined }) }
-    }))
-  }
-  function parseTitles(raw: string, limit: number): string[] | undefined {
-    const titles = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean).slice(0, limit)
-    return titles.length ? titles : undefined
+    onChange(value.map(item => item.id === id ? { ...item, quantity: count } : item))
   }
   return <LayoutGroup id={group}><section className={`quick-actions ${compact ? 'is-compact' : ''}`} aria-label="Acciones rápidas">
     <div className="quick-actions-heading"><div><h3>¿Qué hiciste hoy?</h3><p>Elegí acciones y ajustá la cantidad.</p></div><span>{value.length} seleccionadas</span></div>
@@ -78,9 +70,7 @@ export default function QuickActions({ value, onChange, compact = false, storage
         {story && !item.storyCounts ? <><StoryDayPicker value={item.scheduledDays!} onChange={scheduledDays => onChange(value.map(entry => entry.id === item.id ? { ...entry, scheduledDays } : entry))} /><button type="button" className="text-button story-split" onClick={() => { const storyCounts = item.scheduledDays!.map(day => ({ day, quantity: 1 })); onChange(value.map(entry => entry.id === item.id ? { ...entry, storyCounts, quantity: storyCounts.reduce((sum, part) => sum + part.quantity, 0) } : entry)) }}>Indicar cuántas por día</button></> : null}
         {!story && isScheduledAction(item.typeId) ? <StoryDayPicker publication={item.typeId === 'meta.post.scheduled'} value={item.scheduledDays!} onChange={scheduledDays => onChange(value.map(entry => entry.id === item.id ? { ...entry, scheduledDays } : entry))} /> : null}
         {CREATED_WITH_END_DATE.has(item.typeId) ? <label className="action-end-date"><span>Termina el</span><input type="date" aria-label={`Fecha de fin: ${definition.label}`} value={item.endsOn ?? ''} onChange={event => onChange(value.map(entry => { if (entry.id !== item.id) return entry; const endsOn = event.target.value; return endsOn ? { ...entry, endsOn } : { ...entry, endsOn: undefined } }))} /><small>{item.endsOn ? 'Ese día deja de estar activo.' : 'Opcional, para un feriado o un evento del cliente.'}</small></label> : null}
-        {ITEM_TITLED_ACTIONS.has(item.typeId) ? (item.quantity === 1
-          ? <label className="action-item-titles"><span>{itemTitleLabel(item.typeId, 1)}</span><input type="text" maxLength={80} placeholder="Opcional · pegá o escribí el nombre" aria-label={itemTitleLabel(item.typeId, 1)} value={item.itemTitles?.[0] ?? ''} onChange={event => onChange(value.map(entry => { if (entry.id !== item.id) return entry; const title = event.target.value; const normalized = title.trim(); return normalized ? { ...entry, itemTitles: [normalized] } : title ? { ...entry, itemTitles: [title] } : { ...entry, itemTitles: undefined } }))} onBlur={event => onChange(value.map(entry => { if (entry.id !== item.id) return entry; const normalized = event.target.value.trim(); return normalized ? { ...entry, itemTitles: [normalized] } : { ...entry, itemTitles: undefined } }))} /><small>Aparece en el informe junto a la acción.</small></label>
-          : <label className="action-item-titles"><span>{itemTitleLabel(item.typeId, item.quantity)}</span><textarea rows={Math.min(3, item.quantity)} maxLength={80 * item.quantity + item.quantity} placeholder={`Opcional · hasta ${item.quantity} líneas`} aria-label={itemTitleLabel(item.typeId, item.quantity)} value={(item.itemTitles ?? []).join('\n')} onChange={event => onChange(value.map(entry => entry.id === item.id ? { ...entry, itemTitles: parseTitles(event.target.value, item.quantity) } : entry))} /><small>Un título por línea, como máximo {item.quantity}.</small></label>) : null}
+        {ITEM_TITLED_ACTIONS.has(item.typeId) ? <label className="action-item-titles"><span>{itemTitleLabel(item.typeId)}</span><textarea rows={3} maxLength={ITEM_TITLE_FIELD_MAX_LENGTH} placeholder="Opcional · podés separar con comas o saltos de línea" aria-label={itemTitleLabel(item.typeId)} value={itemTitlesToText(item.itemTitles)} onChange={event => onChange(value.map(entry => entry.id === item.id ? { ...entry, itemTitles: parseItemTitles(event.target.value) } : entry))} /><small>Aparece en el informe junto a la acción. Podés separar con comas o saltos de línea.</small></label> : null}
       </motion.div>
     })}</AnimatePresence>{!value.length ? <p className="quick-actions-empty">Las acciones elegidas aparecen acá. También podés registrar una revisión sin cambios.</p> : null}</div>
   </section></LayoutGroup>
