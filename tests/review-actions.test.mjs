@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ACTION_TYPES, actionDefinition, availableCustomActions, describeReviewActions, storyDaysLabel, validCustomAction, validReviewActions } from '../src/review-actions.ts'
+import { ACTION_TYPES, actionDefinition, availableCustomActions, describeReviewActions, formatItemTitles, itemTitlesToText, parseItemTitles, storyDaysLabel, validCustomAction, validReviewActions } from '../src/review-actions.ts'
 
 const manual = { id: 'event-1', typeId: 'meta.ad.created', quantity: 3, source: 'manual', evidence: 'user_confirmed' }
 
@@ -49,13 +49,21 @@ test('created ads, scheduled stories and posts can record optional titles', () =
   const ad = { ...manual, quantity: 2, itemTitles: ['Promo invierno', 'Retargeting'] }
   assert.equal(validReviewActions([ad]), true)
   assert.equal(validReviewActions([{ ...ad, itemTitles: ['Promo', 'Promo'] }]), false)
-  assert.equal(validReviewActions([{ ...ad, itemTitles: [...ad.itemTitles, 'Extra'] }]), false)
+  assert.equal(validReviewActions([{ ...ad, itemTitles: [...ad.itemTitles, 'Extra nombre'] }]), true, 'title count is not capped by quantity')
   assert.equal(validReviewActions([{ ...manual, typeId: 'google.keyword.updated', itemTitles: ['KW'] }]), false)
   const story = { ...manual, typeId: 'meta.story.scheduled', scheduledDays: ['fri'], itemTitles: ['Lanzamiento'] }
   assert.match(describeReviewActions({ actions: '', actionEntries: [story] }), /Lanzamiento/)
   const post = { ...manual, typeId: 'meta.post.scheduled', scheduledDays: ['mon'], quantity: 1, itemTitles: ['Oferta del mes'] }
   assert.match(describeReviewActions({ actions: '', actionEntries: [ad] }), /Promo invierno/)
   assert.match(describeReviewActions({ actions: '', actionEntries: [post] }), /Oferta del mes/)
+})
+
+test('item titles parse from commas or line breaks and render for reports', () => {
+  assert.deepEqual(parseItemTitles('A, B\nC'), ['A', 'B', 'C'])
+  assert.deepEqual(parseItemTitles('  Promo invierno ,  '), ['Promo invierno'])
+  assert.equal(parseItemTitles('  \n  '), undefined)
+  assert.equal(itemTitlesToText(['Uno', 'Dos']), 'Uno\nDos')
+  assert.match(formatItemTitles(['Promo invierno', 'Retargeting Q4']), /Promo invierno, Retargeting Q4/)
 })
 
 test('a created ad, ad set or campaign can record an optional end date', () => {
