@@ -52,9 +52,14 @@ export function itemTitleLabel(typeId: string): string {
   if (typeId === 'meta.post.scheduled') return 'Nombres de publicaciones (opcional)'
   return 'Nombres de anuncios (opcional)'
 }
-/** Split freeform input on commas or line breaks; trim; drop empties. */
+/** Split on commas, line breaks, or " - ". Hyphens inside a title stay put. */
 export function parseItemTitles(raw: string): string[] | undefined {
-  const titles = raw.split(/[,\r\n]+/).map(part => part.trim()).filter(Boolean)
+  const titles = raw.split(/\s+-\s+|[,\r\n]+/).map(part => part.trim()).filter(Boolean)
+  return titles.length ? titles : undefined
+}
+/** Keep at most `quantity` names. The field shows the cut; validation rejects a longer list. */
+export function storyDayTitlesFromInput(raw: string, quantity: number): string[] | undefined {
+  const titles = (parseItemTitles(raw) ?? []).slice(0, Math.max(0, quantity))
   return titles.length ? titles : undefined
 }
 export function itemTitlesToText(titles: readonly string[] | undefined): string {
@@ -64,7 +69,53 @@ export function formatItemTitles(titles: readonly string[] | undefined): string 
   const items = titles?.map(title => title.trim()).filter(Boolean) ?? []
   return items.length ? ` · ${items.join(', ')}` : ''
 }
-export type StoryDayCount = { day: StoryDay; quantity: number }
+export type StoryDayCount = { day: StoryDay; quantity: number; titles?: string[] }
+function titledDay(part: StoryDayCount): StoryDayCount {
+  const titles = part.titles?.map(title => title.trim()).filter(Boolean)
+  return titles?.length ? { day: part.day, quantity: part.quantity, titles } : { day: part.day, quantity: part.quantity }
+}
+/** Flat names that the day fields did not take over. Matching lists retire once a day stores its own titles. */
+export function storyItemTitlesAfterCounts(previous: readonly StoryDayCount[] | undefined, next: readonly StoryDayCount[], itemTitles?: readonly string[]): string[] | undefined {
+  if (!next.some(part => part.titles?.length)) return itemTitles ? [...itemTitles] : undefined
+  const hadExplicit = previous?.some(part => part.titles?.some(title => title.trim()))
+  const fallbackPlaced = !hadExplicit && storyCountsWithTitles(previous ?? [], itemTitles).some(part => part.titles?.length)
+  if (hadExplicit || fallbackPlaced) return undefined
+  const shown = new Set(next.flatMap(part => part.titles ?? []))
+  const unused = (itemTitles ?? []).map(title => title.trim()).filter(title => title && !shown.has(title))
+  return unused.length ? unused : undefined
+}
+/** Per-day titles win. A flat list fills weekday order only when it has one name per historia. */
+export function storyCountsWithTitles(counts: readonly StoryDayCount[], fallbackTitles?: readonly string[]): StoryDayCount[] {
+  const ordered = STORY_DAYS.flatMap(day => {
+    const found = counts.find(item => item.day === day.id)
+    return found ? [titledDay(found)] : []
+  })
+  if (ordered.some(part => part.titles?.length)) return ordered
+  const fallback = fallbackTitles?.map(title => title.trim()).filter(Boolean) ?? []
+  const total = ordered.reduce((sum, part) => sum + part.quantity, 0)
+  if (!fallback.length || fallback.length !== total) return ordered
+  let index = 0
+  return ordered.map(part => {
+    const titles = fallback.slice(index, index + part.quantity)
+    index += part.quantity
+    return { day: part.day, quantity: part.quantity, titles }
+  })
+}
+/** Day clauses in weekday order. Titles sit in parentheses on their day; « · » joins those clauses. */
+export function formatStorySchedule(counts: readonly StoryDayCount[], fallbackTitles?: readonly string[]): { schedule: string; suffix: string } {
+  const explicit = counts.some(part => part.titles?.some(title => title.trim()))
+  const resolved = storyCountsWithTitles(counts, explicit ? undefined : fallbackTitles)
+  const shown = new Set(resolved.flatMap(part => part.titles ?? []))
+  const unused = (fallbackTitles ?? []).map(title => title.trim()).filter(title => title && !shown.has(title))
+  if (!shown.size) return { schedule: formatDayQuantities(resolved), suffix: formatItemTitles(unused) }
+  const parts = STORY_DAYS.flatMap(day => {
+    const found = resolved.find(item => item.day === day.id)
+    if (!found) return []
+    const named = found.titles?.length ? ` (${found.titles.join(', ')})` : ''
+    return [`${found.quantity} para ${day.label}${named}`]
+  })
+  return { schedule: parts.join(' · '), suffix: formatItemTitles(unused) }
+}
 export function validCalendarDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
   const [year, month, day] = value.split('-').map(Number)
@@ -89,7 +140,7 @@ export type ReviewAction = {
   evidence: 'user_confirmed' | 'observed'
   sourceEventId?: string
   scheduledDays?: StoryDay[]
-  /** Per-day story quantities. Absent on older records, which only know the combined total. */
+  /** Per-day quantities, with optional titles for that day. Absent on older records, which only know the combined total. */
   storyCounts?: StoryDayCount[]
   /** Optional last active day for a created ad, ad set or campaign. */
   endsOn?: string
@@ -119,11 +170,25 @@ export function validReviewActions(value: unknown): value is ReviewAction[] {
       const counts: unknown[] = Array.isArray(item.storyCounts) ? item.storyCounts : []
       if (item.typeId !== 'meta.story.scheduled' || !Array.isArray(item.storyCounts) || counts.length !== item.scheduledDays?.length || counts.length > 7) return false
       const seen = new Set<string>()
+      let titleCount = 0
+      let titleLength = 0
       const quantities = counts.map(part => {
         if (!part || typeof part !== 'object') return 0
         const day = 'day' in part ? part.day : undefined
         const quantity = 'quantity' in part ? part.quantity : undefined
+        const titles = 'titles' in part ? part.titles : undefined
         if (typeof day !== 'string' || typeof quantity !== 'number' || seen.has(day) || !item.scheduledDays!.includes(day as StoryDay) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 999) return 0
+        if (titles !== undefined) {
+          if (!Array.isArray(titles) || !titles.length || titles.length > quantity) return 0
+          const seenTitles = new Set<string>()
+          for (const title of titles) {
+            if (typeof title !== 'string' || title !== title.trim() || title.length < 1 || title.length > ITEM_TITLE_SEGMENT_MAX_LENGTH || seenTitles.has(title)) return 0
+            seenTitles.add(title)
+            titleCount += 1
+            titleLength += title.length
+          }
+          if (titleCount > ITEM_TITLE_MAX_COUNT || titleLength > ITEM_TITLE_FIELD_MAX_LENGTH) return 0
+        }
         seen.add(day)
         return quantity
       })
@@ -150,9 +215,10 @@ export function describeReviewActions(review: { actions: string; actionEntries?:
   const entries = validReviewActions(review.actionEntries) ? review.actionEntries : []
   const lines = entries.map(item => {
     const definition = entryDefinition(item)!
-    const scheduled = item.storyCounts?.length ? `: ${formatDayQuantities(item.storyCounts)}` : isScheduledAction(item.typeId) ? `: ${item.quantity} · para ${STORY_DAYS.filter(day => item.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')}` : `: ${item.quantity}`
+    const story = item.typeId === 'meta.story.scheduled' && item.storyCounts?.length ? formatStorySchedule(item.storyCounts, item.itemTitles) : undefined
+    const scheduled = story ? `: ${story.schedule}` : isScheduledAction(item.typeId) ? `: ${item.quantity} · para ${STORY_DAYS.filter(day => item.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')}` : `: ${item.quantity}`
     const until = item.endsOn ? `, hasta el ${item.endsOn.split('-').reverse().join('/')}` : ''
-    const named = formatItemTitles(item.itemTitles)
+    const named = story ? story.suffix : formatItemTitles(item.itemTitles)
     return `${serviceLabel(definitionService(definition))} · ${definition.label}${scheduled}${named}${until}${item.evidence === 'observed' ? ' (por confirmar)' : ''}`
   })
   return [...lines, review.actions].filter(Boolean).join('\n')

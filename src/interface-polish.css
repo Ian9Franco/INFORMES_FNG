@@ -60,8 +60,11 @@
   .story-day-menu [role='group'] { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
   .story-day-menu .story-day-row { display: contents; }
   .story-day-menu.is-counts [role='group'] { display: flex; flex-direction: column; }
-  .story-day-menu.is-counts .story-day-row { display: flex; align-items: center; gap: 8px; }
+  .story-day-menu.is-counts .story-day-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .story-day-menu.is-counts [role='checkbox'] { flex: 1; }
+  .story-day-titles { flex: 1 1 100%; display: flex; flex-direction: column; gap: 4px; }
+  .story-day-titles textarea { width: 100%; min-height: 44px; border: 0; border-radius: 12px; background: var(--surface); color: var(--ink); padding: 8px 10px; font: inherit; resize: vertical; }
+  .story-day-titles small { color: var(--muted); font-size: 11px; }
   .story-day-quantity { display: inline-flex; align-items: center; flex: none; border-radius: 12px; background: var(--surface); }
   .story-day-quantity button { width: 36px; min-height: 44px; border: 0; background: transparent; color: var(--accent); }
   .story-day-quantity input { width: 42px; min-height: 44px; border: 0; background: transparent; text-align: center; color: var(--ink); font-variant-numeric: tabular-nums; -moz-appearance: textfield; }

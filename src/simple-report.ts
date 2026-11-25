@@ -1,5 +1,5 @@
 import type { Review } from './data'
-import { entryDefinition, entryService, formatDayQuantities, formatItemTitles, isScheduledAction, STORY_DAYS, validReviewActions, type ReviewAction } from './review-actions.ts'
+import { entryDefinition, entryService, formatItemTitles, formatStorySchedule, isScheduledAction, STORY_DAYS, storyCountsWithTitles, validReviewActions, type ReviewAction, type StoryDayCount } from './review-actions.ts'
 import { serviceLabel, WORK_SERVICES, type WorkService } from './work-services.ts'
 
 /** Reader-facing phrases. The person who opens the report did not write it. */
@@ -29,9 +29,9 @@ export function readerActionText(entry: ReviewAction, registeredDate?: string): 
   const pending = entry.evidence === 'observed' ? ' · por confirmar' : ''
   const noted = registeredDate ? ` (anotado el ${registeredDate.split('-').reverse().join('/')})` : ''
   if (entry.typeId === 'meta.story.scheduled' && entry.storyCounts?.length) {
-    const split = formatDayQuantities(entry.storyCounts)
+    const { schedule, suffix } = formatStorySchedule(entry.storyCounts, entry.itemTitles)
     const noun = entry.quantity === 1 ? 'historia' : 'historias'
-    return `${entry.quantity} ${noun}: ${split}${formatItemTitles(entry.itemTitles)}${noted}${pending}`
+    return `${entry.quantity} ${noun}: ${schedule}${suffix}${noted}${pending}`
   }
   if (isScheduledAction(entry.typeId)) {
     const days = STORY_DAYS.filter(day => entry.scheduledDays?.includes(day.id)).map(day => day.label).join(', ')
@@ -63,9 +63,16 @@ export function reportActionGroups(reviews: Review[]): ReportActionGroup[] {
       const quantity = items.reduce((sum, item) => sum + item.entry.quantity, 0)
       const pending = items.some(item => item.entry.evidence === 'observed')
       const split = items[0].entry.typeId === 'meta.story.scheduled' && items.every(item => item.entry.storyCounts?.length)
-      const storyCounts = split ? STORY_DAYS.flatMap(day => {
-        const total = items.reduce((sum, item) => sum + (item.entry.storyCounts?.find(part => part.day === day.id)?.quantity ?? 0), 0)
-        return total ? [{ day: day.id, quantity: total }] : []
+      const storyCounts: StoryDayCount[] | undefined = split ? STORY_DAYS.flatMap(day => {
+        let total = 0
+        const titles: string[] = []
+        for (const item of items) {
+          const part = storyCountsWithTitles(item.entry.storyCounts ?? [], item.entry.itemTitles).find(entry => entry.day === day.id)
+          if (!part) continue
+          total += part.quantity
+          for (const title of part.titles ?? []) if (!titles.includes(title)) titles.push(title)
+        }
+        return total ? [{ day: day.id, quantity: total, ...(titles.length ? { titles } : {}) }] : []
       }) : undefined
       const itemTitles = items.reduce<string[]>((acc, item) => {
         for (const title of item.entry.itemTitles ?? []) if (!acc.includes(title)) acc.push(title)

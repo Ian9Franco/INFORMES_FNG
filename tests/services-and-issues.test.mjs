@@ -114,15 +114,20 @@ test('client-requested campaign pause is neutral, persistent and independent of 
 
 test('reader-facing summaries include optional action titles for ads, stories and posts',()=>{
   const ad=action('meta.ad.created',2,{itemTitles:['Promo invierno','Retargeting']})
-  assert.match(readerActionText(ad),/Promo invierno, Retargeting/)
+  assert.match(readerActionText(ad),/2 anuncios añadidos · Promo invierno, Retargeting/)
   const story=action('meta.story.scheduled',2,{scheduledDays:['sat','sun'],itemTitles:['Lanzamiento','Cierre']})
-  assert.match(readerActionText(story),/Lanzamiento, Cierre/)
+  assert.match(readerActionText(story),/2 historias programadas para sábado, domingo · Lanzamiento, Cierre/)
   const split=action('meta.story.scheduled',5,{scheduledDays:['sun','sat'],storyCounts:[{day:'sat',quantity:3},{day:'sun',quantity:2}],itemTitles:['Sáb A','Sáb B','Sáb C','Dom D','Dom E']})
-  assert.match(readerActionText(split),/Sáb A/)
+  assert.equal(readerActionText(split),'5 historias: 3 para sábado (Sáb A, Sáb B, Sáb C) · 2 para domingo (Dom D, Dom E)')
+  const named=action('meta.story.scheduled',4,{scheduledDays:['sat','mon'],storyCounts:[{day:'sat',quantity:2,titles:['2026-11-SiamoAperti-V1.0-IH','2026-11-Otra-V1.0-IH']},{day:'mon',quantity:2,titles:['Lunes A','Lunes B']}]})
+  assert.equal(readerActionText(named),'4 historias: 2 para lunes (Lunes A, Lunes B) · 2 para sábado (2026-11-SiamoAperti-V1.0-IH, 2026-11-Otra-V1.0-IH)')
   const post=action('meta.post.scheduled',1,{scheduledDays:['mon'],itemTitles:['Oferta del mes']})
-  assert.match(readerActionText(post,'2026-10-16'),/Oferta del mes/)
+  assert.match(readerActionText(post,'2026-10-16'),/1 publicación programada para lunes · Oferta del mes/)
   const reviews=[review('meta_organic',{date:'2026-10-09',actionEntries:[action('meta.story.scheduled',1,{scheduledDays:['sat'],itemTitles:['Historia A']})]}),review('meta_organic',{date:'2026-10-09',actionEntries:[action('meta.story.scheduled',1,{scheduledDays:['sun'],itemTitles:['Historia B']})]})]
   assert.match(simpleActionSummary(reviews).join('\n'),/Historia A, Historia B/)
+  const grouped=[review('meta_organic',{actionEntries:[action('meta.story.scheduled',3,{scheduledDays:['mon','sat'],storyCounts:[{day:'mon',quantity:2,titles:['Lunes A','Lunes B']},{day:'sat',quantity:1,titles:['Sáb A']}]})]}),review('meta_organic',{id:'later',actionEntries:[action('meta.story.scheduled',1,{scheduledDays:['sat'],storyCounts:[{day:'sat',quantity:1,titles:['Sáb B']}]})]})]
+  assert.match(simpleActionSummary(grouped).join('\n'),/4 historias: 2 para lunes \(Lunes A, Lunes B\) · 2 para sábado \(Sáb A, Sáb B\) \(anotado el 16\/10\/2026\)/)
+  assert.match(compactReviewText(grouped[0]),/3 historias: 2 para lunes \(Lunes A, Lunes B\) · 1 para sábado \(Sáb A\)/)
 })
 
 test('programming is readable, keeps every registration date and never claims publication occurred',()=>{

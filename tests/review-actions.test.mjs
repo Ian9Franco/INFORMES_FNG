@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ACTION_TYPES, actionDefinition, availableCustomActions, describeReviewActions, formatItemTitles, itemTitlesToText, parseItemTitles, storyDaysLabel, validCustomAction, validReviewActions } from '../src/review-actions.ts'
+import { ACTION_TYPES, actionDefinition, availableCustomActions, describeReviewActions, formatItemTitles, itemTitlesToText, parseItemTitles, storyCountsWithTitles, storyDayTitlesFromInput, storyDaysLabel, validCustomAction, validReviewActions } from '../src/review-actions.ts'
 
 const manual = { id: 'event-1', typeId: 'meta.ad.created', quantity: 3, source: 'manual', evidence: 'user_confirmed' }
 
@@ -58,12 +58,31 @@ test('created ads, scheduled stories and posts can record optional titles', () =
   assert.match(describeReviewActions({ actions: '', actionEntries: [post] }), /Oferta del mes/)
 })
 
-test('item titles parse from commas or line breaks and render for reports', () => {
+test('item titles parse from commas, line breaks or " - " and keep hyphens inside a name', () => {
   assert.deepEqual(parseItemTitles('A, B\nC'), ['A', 'B', 'C'])
   assert.deepEqual(parseItemTitles('  Promo invierno ,  '), ['Promo invierno'])
   assert.equal(parseItemTitles('  \n  '), undefined)
+  assert.deepEqual(parseItemTitles('A - B, C\nD'), ['A', 'B', 'C', 'D'])
+  assert.deepEqual(parseItemTitles('2026-11-SiamoAperti-V1.0-IH - 2026-11-LaCasonaEstáAbierta-V1.0-IH'), ['2026-11-SiamoAperti-V1.0-IH', '2026-11-LaCasonaEstáAbierta-V1.0-IH'])
+  assert.deepEqual(storyDayTitlesFromInput('Uno - Dos - Tres', 2), ['Uno', 'Dos'])
   assert.equal(itemTitlesToText(['Uno', 'Dos']), 'Uno\nDos')
   assert.match(formatItemTitles(['Promo invierno', 'Retargeting Q4']), /Promo invierno, Retargeting Q4/)
+})
+
+test('story titles belong to their weekday and a flat list is only a fallback', () => {
+  const named = { ...manual, typeId: 'meta.story.scheduled', quantity: 4, scheduledDays: ['sat', 'mon'], storyCounts: [{ day: 'sat', quantity: 2, titles: ['2026-11-SiamoAperti-V1.0-IH', 'Otra'] }, { day: 'mon', quantity: 2, titles: ['Lunes A'] }] }
+  assert.equal(validReviewActions([named]), true)
+  assert.equal(validReviewActions([{ ...named, storyCounts: [{ day: 'sat', quantity: 2, titles: ['A', 'B', 'C'] }, { day: 'mon', quantity: 2 }] }]), false)
+  assert.equal(validReviewActions([{ ...named, storyCounts: [{ day: 'sat', quantity: 2, titles: ['A', 'A'] }, { day: 'mon', quantity: 2 }] }]), false)
+  assert.equal(validReviewActions([{ ...named, storyCounts: [{ day: 'mon', quantity: 2, titles: ['Misma'] }, { day: 'sat', quantity: 2, titles: ['Misma'] }] }]), true)
+  assert.match(describeReviewActions({ actions: '', actionEntries: [named] }), /Programé historia: 2 para lunes \(Lunes A\) · 2 para sábado \(2026-11-SiamoAperti-V1\.0-IH, Otra\)/)
+  assert.doesNotMatch(describeReviewActions({ actions: '', actionEntries: [named] }), /· Lunes A,/)
+  const flat = { ...manual, typeId: 'meta.story.scheduled', quantity: 3, scheduledDays: ['mon', 'sat'], storyCounts: [{ day: 'sat', quantity: 2 }, { day: 'mon', quantity: 1 }], itemTitles: ['Lunes', 'Sáb A', 'Sáb B'] }
+  assert.deepEqual(storyCountsWithTitles(flat.storyCounts, flat.itemTitles), [{ day: 'mon', quantity: 1, titles: ['Lunes'] }, { day: 'sat', quantity: 2, titles: ['Sáb A', 'Sáb B'] }])
+  assert.match(describeReviewActions({ actions: '', actionEntries: [flat] }), /1 para lunes \(Lunes\) · 2 para sábado \(Sáb A, Sáb B\)/)
+  const loose = { ...flat, itemTitles: ['Solo'] }
+  assert.deepEqual(storyCountsWithTitles(loose.storyCounts, loose.itemTitles), [{ day: 'mon', quantity: 1 }, { day: 'sat', quantity: 2 }])
+  assert.match(describeReviewActions({ actions: '', actionEntries: [loose] }), /1 para lunes y 2 para sábado · Solo/)
 })
 
 test('a created ad, ad set or campaign can record an optional end date', () => {
