@@ -46,12 +46,15 @@ test('isolated PostgreSQL: CAS, RLS, account matching, event deduplication and l
     await write([{...storyReview,expectedVersion:7,payload:{...storyReview.payload,actionEntries:[{...titled,itemTitles:['A','B','C']}]}}])
     await assert.rejects(write([{...storyReview,expectedVersion:8,payload:{...storyReview.payload,actionEntries:[{...story,id:'budget',typeId:'meta.budget.updated',scheduledDays:undefined,itemTitles:['Nope']}]}}]),/Títulos de acción/)
     await assert.rejects(write([{...storyReview,expectedVersion:8,payload:{...storyReview.payload,actionEntries:[{...story,quantity:0}]}}]),/Acción inválida/)
+    const namedDays={...counted,storyCounts:[{day:'sat',quantity:3,titles:['2026-11-SiamoAperti-V1.0-IH','Otra']},{day:'sun',quantity:2}]}
+    await write([{...storyReview,expectedVersion:8,payload:{...storyReview.payload,actionEntries:[namedDays]}}])
+    await assert.rejects(write([{...storyReview,expectedVersion:9,payload:{...storyReview.payload,actionEntries:[{...namedDays,storyCounts:[{day:'sat',quantity:3,titles:['A','B','C','D']},{day:'sun',quantity:2}]}]}}]),/Títulos de historias/)
     const definition={id:'custom.00000000-0000-4000-8000-000000000003',label:'Actualicé catálogo',platform:'meta_ads',scope:'client',clientId:'c'}
     const custom={...story,id:'custom-entry',typeId:definition.id,customDefinition:definition}; delete custom.scheduledDays
-    const customReview={...storyReview,expectedVersion:8,payload:{...storyReview.payload,actionEntries:[custom,{...story,id:'post',typeId:'meta.post.scheduled'}]}}
+    const customReview={...storyReview,expectedVersion:9,payload:{...storyReview.payload,actionEntries:[custom,{...story,id:'post',typeId:'meta.post.scheduled'}]}}
     // Reversed order must still create the definition before the review.
     await write([customReview,{kind:'action',id:definition.id,expectedVersion:0,payload:definition}])
-    await assert.rejects(write([{...customReview,expectedVersion:9,payload:{...customReview.payload,actionEntries:[{...custom,customDefinition:{...definition,label:'Alterada'}}]}}]),/alterada/)
+    await assert.rejects(write([{...customReview,expectedVersion:10,payload:{...customReview.payload,actionEntries:[{...custom,customDefinition:{...definition,label:'Alterada'}}]}}]),/alterada/)
     await assert.rejects(write([{kind:'action',id:definition.id,expectedVersion:1,payload:{...definition,scope:'general'}}]),/general|inmutables/)
     await assert.rejects(write([{kind:'action',id:definition.id,expectedVersion:1,payload:definition,deleted:true}]),/historial/)
     const secondClient={...client,id:'d',payload:{id:'d',name:'OTRO',active:true}}
@@ -61,7 +64,7 @@ test('isolated PostgreSQL: CAS, RLS, account matching, event deduplication and l
     const general={...definition,id:'custom.00000000-0000-4000-8000-000000000004',scope:'general'}; delete general.clientId
     const generalEntry={...custom,typeId:general.id,customDefinition:general}
     await write([{...otherReview,payload:{...otherReview.payload,actionEntries:[generalEntry]}},{kind:'action',id:general.id,expectedVersion:0,payload:general}])
-    await write([{...customReview,expectedVersion:9,payload:{...customReview.payload,actionEntries:[generalEntry]}}])
+    await write([{...customReview,expectedVersion:10,payload:{...customReview.payload,actionEntries:[generalEntry]}}])
     await assert.rejects(write([{kind:'action',id:'custom.00000000-0000-4000-8000-000000000005',expectedVersion:0,payload:{...general,id:'custom.00000000-0000-4000-8000-000000000005'}}]),/unique/)
     const events=[{id:'00000000-0000-4000-8000-000000000999',platform:'meta_ads',accountCandidate:'987654321',startedAt:new Date(Date.now()-600000).toISOString(),endedAt:new Date().toISOString(),focusedMs:600000,navigationSignals:4}]
     await db.query('select public.fng_ingest_activity($1::jsonb)',[JSON.stringify(events)])
